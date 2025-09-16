@@ -20,9 +20,13 @@ A desktop time tracking application built with Electron and React.
 
 **Super Easy (Recommended):**
 1. Download or clone this repository
-2. Double-click `Jeremy-Time-Tracker.bat` to launch the app
+2. Double-click `Jeremy-Time-Tracker.vbs` to launch the app
    - First run will auto-install dependencies
    - App launches automatically
+   - **No command prompt stays open!**
+   - Runs completely in background
+
+**Alternative:** Use `Jeremy-Time-Tracker.bat` if VBS doesn't work
 
 **Install as Regular Windows App:**
 1. Double-click `Create-Desktop-Shortcut.bat` for desktop shortcut

@@ -5,8 +5,13 @@ Hi Jeremy! Here's how to set up your time tracker:
 
 SUPER EASY SETUP (Recommended):
 1. Make sure you have Node.js installed (download from nodejs.org)
-2. Double-click "Jeremy-Time-Tracker.bat" to launch the app
+2. Double-click "Jeremy-Time-Tracker.vbs" to launch the app
 3. The app will auto-install and open with a tray icon
+   * NO command prompt window stays open!
+   * Runs completely in the background
+
+ALTERNATIVE (if VBS doesn't work):
+- Double-click "Jeremy-Time-Tracker.bat" instead
 
 INSTALL AS REGULAR APP (Optional):
 1. Double-click "Create-Desktop-Shortcut.bat" for desktop shortcut

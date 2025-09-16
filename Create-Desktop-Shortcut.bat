@@ -2,7 +2,7 @@
 echo Creating desktop shortcut for Jeremy's Time Tracker...
 
 set "shortcutPath=%USERPROFILE%\Desktop\Jeremy's Time Tracker.lnk"
-set "targetPath=%~dp0Jeremy-Time-Tracker.bat"
+set "targetPath=%~dp0Jeremy-Time-Tracker.vbs"
 set "workingDir=%~dp0"
 
 powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%shortcutPath%'); $s.TargetPath = '%targetPath%'; $s.WorkingDirectory = '%workingDir%'; $s.Save()"
