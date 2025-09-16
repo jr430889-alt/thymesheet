@@ -88,7 +88,7 @@ app.whenReady().then(() => {
   createTray();
 
   // Register global hotkeys
-  const ret = globalShortcut.register('CommandOrControl+Shift+T', () => {
+  const ret = globalShortcut.register('CommandOrControl+Shift+X', () => {
     console.log('Hotkey triggered - Window visible:', mainWindow.isVisible(), 'Window focused:', mainWindow.isFocused());
 
     if (mainWindow.isVisible() && mainWindow.isFocused()) {
@@ -119,7 +119,7 @@ app.whenReady().then(() => {
   });
 
   if (!ret) {
-    console.log('Registration failed for Ctrl+Shift+T');
+    console.log('Registration failed for Ctrl+Shift+X');
   }
 
   if (!ret2) {

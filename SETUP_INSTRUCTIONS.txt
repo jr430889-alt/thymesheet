@@ -24,7 +24,7 @@ MANUAL SETUP (If needed):
 3. Run: npm start
 
 HOTKEYS:
-- Ctrl+Shift+T = Show/Hide the app
+- Ctrl+Shift+X = Show/Hide the app
 - Ctrl+Shift+Space = Start/Stop timer
 
 FEATURES:

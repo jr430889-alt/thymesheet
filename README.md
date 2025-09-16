@@ -42,7 +42,7 @@ A desktop time tracking application built with Electron and React.
 ## Usage
 
 ### Global Hotkeys
-- **Ctrl+Shift+T** - Show/Hide the application
+- **Ctrl+Shift+X** - Show/Hide the application
 - **Ctrl+Shift+Space** - Start/Stop timer
 
 ### Getting Started
