@@ -1,0 +1,35 @@
+GRINDSTONE TIME TRACKER - SETUP INSTRUCTIONS
+===========================================
+
+Hi Jeremy! Here's how to set up your time tracker:
+
+EASY SETUP (Option 1):
+1. Make sure you have Node.js installed (download from nodejs.org)
+2. Open Command Prompt in this folder
+3. Run: npm install
+4. Run: npm start
+5. The app will open and you'll see a tray icon
+
+HOTKEYS:
+- Ctrl+Shift+T = Show/Hide the app
+- Ctrl+Shift+Space = Start/Stop timer
+
+FEATURES:
+- System tray integration
+- Project codes and descriptions
+- Time tracking with start/stop
+- Export to Excel and QuickBooks
+- Data persists between sessions
+
+FIRST USE:
+1. Click "Manage Projects" to add your project codes
+2. Select a project from the quick switcher
+3. Click Start to begin tracking time
+4. Use hotkeys for quick access anywhere
+
+TROUBLESHOOTING:
+- If you see React errors, just refresh the app
+- Data saves automatically to localStorage
+- Close the window to hide to tray, right-click tray to quit
+
+Questions? Let me know!

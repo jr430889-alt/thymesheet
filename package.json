@@ -1,0 +1,31 @@
+{
+  "name": "grindstone-time-tracker",
+  "version": "1.0.0",
+  "description": "Desktop time tracking app",
+  "main": "main.js",
+  "author": "Jeremy's Time Tracker Team",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.grindstone.timetracker",
+    "productName": "Grindstone Time Tracker",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "Grindstone-2.0.html",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable"
+    }
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

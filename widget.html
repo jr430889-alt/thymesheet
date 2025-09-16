@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Time Tracker Widget</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 5px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 12px;
+            background: #2c2c2c;
+            color: white;
+            width: 200px;
+            height: 60px;
+            overflow: hidden;
+        }
+        .timer {
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+            padding: 5px;
+        }
+        .controls {
+            text-align: center;
+        }
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 3px 8px;
+            margin: 2px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+        }
+        button:hover {
+            background: #005999;
+        }
+        .project {
+            font-size: 10px;
+            text-align: center;
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="timer" id="timer">00:00:00</div>
+    <div class="project" id="project">No project selected</div>
+    <div class="controls">
+        <button onclick="toggleTimer()">⏯</button>
+        <button onclick="openMain()">📊</button>
+    </div>
+
+    <script>
+        let isTracking = false;
+        let startTime = null;
+        let elapsedTime = 0;
+        let interval = null;
+
+        function formatTime(ms) {
+            const seconds = Math.floor(ms / 1000);
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const remainingSeconds = seconds % 60;
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        function updateTimer() {
+            if (isTracking && startTime) {
+                elapsedTime = Date.now() - startTime;
+                document.getElementById('timer').textContent = formatTime(elapsedTime);
+            }
+        }
+
+        function toggleTimer() {
+            if (isTracking) {
+                // Stop timer
+                isTracking = false;
+                if (interval) clearInterval(interval);
+                document.getElementById('timer').style.color = '#ccc';
+            } else {
+                // Start timer
+                isTracking = true;
+                startTime = Date.now();
+                elapsedTime = 0;
+                document.getElementById('timer').style.color = '#00ff00';
+                interval = setInterval(updateTimer, 1000);
+            }
+        }
+
+        function openMain() {
+            // Open the main time tracker
+            window.open('Grindstone-2.0.html', '_blank');
+        }
+
+        // Initialize
+        document.getElementById('timer').textContent = formatTime(0);
+    </script>
+</body>
+</html>
