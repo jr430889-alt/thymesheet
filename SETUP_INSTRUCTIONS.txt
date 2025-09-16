@@ -3,12 +3,20 @@ JEREMY'S TIME TRACKER - SETUP INSTRUCTIONS
 
 Hi Jeremy! Here's how to set up your time tracker:
 
-EASY SETUP (Option 1):
+SUPER EASY SETUP (Recommended):
 1. Make sure you have Node.js installed (download from nodejs.org)
-2. Open Command Prompt in this folder
-3. Run: npm install
-4. Run: npm start
-5. The app will open and you'll see a tray icon
+2. Double-click "Jeremy-Time-Tracker.bat" to launch the app
+3. The app will auto-install and open with a tray icon
+
+INSTALL AS REGULAR APP (Optional):
+1. Double-click "Create-Desktop-Shortcut.bat" for desktop shortcut
+2. Double-click "Install-To-Start-Menu.bat" for Start Menu entry
+3. Right-click Start Menu entry → "Pin to taskbar" for taskbar access
+
+MANUAL SETUP (If needed):
+1. Open Command Prompt in this folder
+2. Run: npm install
+3. Run: npm start
 
 HOTKEYS:
 - Ctrl+Shift+T = Show/Hide the app

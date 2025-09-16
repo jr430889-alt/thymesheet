@@ -17,10 +17,19 @@ A desktop time tracking application built with Electron and React.
 - [Node.js](https://nodejs.org/) installed on your system
 
 ### Installation
-1. Download or clone this repository
-2. Double-click `START_TIME_TRACKER.bat` (Windows)
 
-   **OR** run manually:
+**Super Easy (Recommended):**
+1. Download or clone this repository
+2. Double-click `Jeremy-Time-Tracker.bat` to launch the app
+   - First run will auto-install dependencies
+   - App launches automatically
+
+**Install as Regular Windows App:**
+1. Double-click `Create-Desktop-Shortcut.bat` for desktop shortcut
+2. Double-click `Install-To-Start-Menu.bat` for Start Menu entry
+3. Right-click Start Menu entry → "Pin to taskbar" for taskbar access
+
+**Manual Installation:**
    ```bash
    npm install
    npm start
