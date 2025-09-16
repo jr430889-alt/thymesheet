@@ -89,15 +89,31 @@ app.whenReady().then(() => {
 
   // Register global hotkeys
   const ret = globalShortcut.register('CommandOrControl+Shift+T', () => {
-    if (mainWindow.isVisible()) {
+    console.log('Hotkey triggered - Window visible:', mainWindow.isVisible(), 'Window focused:', mainWindow.isFocused());
+
+    if (mainWindow.isVisible() && mainWindow.isFocused()) {
+      // If window is visible and focused, hide it
+      console.log('Hiding window');
       mainWindow.hide();
     } else {
+      // If window is hidden or not focused, show and focus it
+      console.log('Showing and focusing window');
       mainWindow.show();
       mainWindow.focus();
+      mainWindow.setAlwaysOnTop(true);
+      mainWindow.setAlwaysOnTop(false); // This brings it to front
     }
   });
 
   const ret2 = globalShortcut.register('CommandOrControl+Shift+Space', () => {
+    console.log('Timer toggle hotkey triggered');
+
+    // Make sure window is visible when toggling timer
+    if (!mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+
     // Toggle timer with hotkey
     mainWindow.webContents.send('toggle-timer');
   });
