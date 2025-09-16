@@ -10,14 +10,14 @@
     "build-win": "electron-builder --win --x64"
   },
   "build": {
-    "appId": "com.grindstone.timetracker",
-    "productName": "Grindstone Time Tracker",
+    "appId": "com.jeremy.timetracker",
+    "productName": "Jeremy's Time Tracker",
     "directories": {
       "output": "dist"
     },
     "files": [
       "main.js",
-      "Grindstone-2.0.html",
+      "Jeremy-Time-Tracker.html",
       "package.json"
     ],
     "win": {

@@ -1,4 +1,4 @@
-GRINDSTONE TIME TRACKER - SETUP INSTRUCTIONS
+JEREMY'S TIME TRACKER - SETUP INSTRUCTIONS
 ===========================================
 
 Hi Jeremy! Here's how to set up your time tracker:

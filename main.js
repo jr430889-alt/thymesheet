@@ -15,7 +15,7 @@ function createWindow() {
     show: false
   });
 
-  mainWindow.loadFile('Grindstone-2.0.html');
+  mainWindow.loadFile('Jeremy-Time-Tracker.html');
 
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
@@ -75,7 +75,7 @@ function createTray() {
     }
   ]);
 
-  tray.setToolTip('Grindstone Time Tracker');
+  tray.setToolTip("Jeremy's Time Tracker");
   tray.setContextMenu(contextMenu);
 
   tray.on('double-click', () => {
