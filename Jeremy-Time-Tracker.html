@@ -275,6 +275,12 @@
             const [filterClient, setFilterClient] = useState('');
             const [filterProject, setFilterProject] = useState('');
 
+            // Cascading dropdown state for Track Time
+            const [selectedClient, setSelectedClient] = useState('');
+            const [selectedProjectName, setSelectedProjectName] = useState('');
+            const [selectedTaskCode, setSelectedTaskCode] = useState('');
+            const [selectedSubtaskCode, setSelectedSubtaskCode] = useState('');
+
             // Load data from localStorage
             useEffect(() => {
                 try {
@@ -615,7 +621,7 @@
                     'Orbital,O2-X Habitat Offsetting Plan,1. Meetings and Delivery,1.1 Project',
                     'Orbital,O2-X Habitat Offsetting Plan,1. Meetings and Delivery,1.2 Internal',
                     'Orbital,O2-X Habitat Offsetting Plan,1. Meetings and Delivery,1.3 Regulatory'
-                ].join('\\n');
+                ].join('\n');
 
                 const blob = new Blob([csvContent], { type: 'text/csv' });
                 const url = window.URL.createObjectURL(blob);
@@ -634,7 +640,7 @@
                 reader.onload = (e) => {
                     try {
                         const text = e.target.result;
-                        const lines = text.split('\\n').filter(line => line.trim());
+                        const lines = text.split('\n').filter(line => line.trim());
                         const dataLines = lines.slice(1);
 
                         const importedProjects = dataLines.map((line, index) => {
@@ -788,7 +794,7 @@
                     'DETAILED ENTRIES',
                     detailHeaders.join(','),
                     ...detailRows.map(row => row.join(','))
-                ].join('\\n');
+                ].join('\n');
 
                 const blob = new Blob([csvContent], { type: 'text/csv' });
                 const url = window.URL.createObjectURL(blob);
@@ -820,7 +826,7 @@
                 const csvContent = [
                     qboHeaders.join(','),
                     ...qboRows.map(row => row.join(','))
-                ].join('\\n');
+                ].join('\n');
 
                 const blob = new Blob([csvContent], { type: 'text/csv' });
                 const url = window.URL.createObjectURL(blob);
@@ -839,6 +845,79 @@
             const getUniqueProjects = () => {
                 const projects = new Set(timeEntries.map(e => e.projectName));
                 return Array.from(projects).sort();
+            };
+
+            // Helper functions for cascading dropdowns
+            const getAvailableClients = () => {
+                const clients = new Set(projectCodes.map(p => p.clientName));
+                return Array.from(clients).sort();
+            };
+
+            const getAvailableProjectNames = (clientName) => {
+                if (!clientName) return [];
+                const projects = new Set(
+                    projectCodes
+                        .filter(p => p.clientName === clientName)
+                        .map(p => p.projectName)
+                );
+                return Array.from(projects).sort();
+            };
+
+            const getAvailableTaskCodes = (clientName, projectName) => {
+                if (!clientName || !projectName) return [];
+                const tasks = new Set(
+                    projectCodes
+                        .filter(p => p.clientName === clientName && p.projectName === projectName)
+                        .map(p => p.taskCode)
+                );
+                return Array.from(tasks).sort();
+            };
+
+            const getAvailableSubtaskCodes = (clientName, projectName, taskCode) => {
+                if (!clientName || !projectName || !taskCode) return [];
+                const subtasks = projectCodes
+                    .filter(p =>
+                        p.clientName === clientName &&
+                        p.projectName === projectName &&
+                        p.taskCode === taskCode
+                    )
+                    .map(p => ({
+                        id: p.id,
+                        subtaskCode: p.subtaskCode,
+                        code: p.code
+                    }))
+                    .sort((a, b) => a.subtaskCode.localeCompare(b.subtaskCode));
+                return subtasks;
+            };
+
+            // Handle cascading dropdown selection
+            const handleClientChange = (clientName) => {
+                setSelectedClient(clientName);
+                setSelectedProjectName('');
+                setSelectedTaskCode('');
+                setSelectedSubtaskCode('');
+                setSelectedProject('');
+            };
+
+            const handleProjectNameChange = (projectName) => {
+                setSelectedProjectName(projectName);
+                setSelectedTaskCode('');
+                setSelectedSubtaskCode('');
+                setSelectedProject('');
+            };
+
+            const handleTaskCodeChange = (taskCode) => {
+                setSelectedTaskCode(taskCode);
+                setSelectedSubtaskCode('');
+                setSelectedProject('');
+            };
+
+            const handleSubtaskCodeChange = (subtaskId) => {
+                const subtask = projectCodes.find(p => p.id.toString() === subtaskId);
+                if (subtask) {
+                    setSelectedSubtaskCode(subtask.subtaskCode);
+                    setSelectedProject(subtaskId);
+                }
             };
 
             if (showSetup) {
@@ -1695,23 +1774,69 @@
                     React.createElement('h2', { className: "text-xl font-semibold text-eggplant mb-6" }, "Track Time"),
                     React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-3 gap-6" },
                         React.createElement('div', { className: "lg:col-span-2" },
-                            React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-3" }, "Select Project"),
-                            React.createElement('select', {
-                                value: selectedProject,
-                                onChange: (e) => {
-                                    const newProjectId = parseInt(e.target.value);
-                                    if (isTracking) {
-                                        switchProject(newProjectId);
-                                    } else {
-                                        setSelectedProject(e.target.value);
-                                    }
-                                },
-                                className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800"
-                            },
-                                React.createElement('option', { value: "", disabled: true }, "Select a project..."),
-                                projectCodes.map(project => {
-                                    return React.createElement('option', { key: project.id, value: project.id }, project.code + " - " + project.clientName);
-                                })
+                            React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-4 mb-4" },
+                                React.createElement('div', null,
+                                    React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-2" }, "1. Select Client"),
+                                    React.createElement('select', {
+                                        value: selectedClient,
+                                        onChange: (e) => handleClientChange(e.target.value),
+                                        className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
+                                        disabled: isTracking
+                                    },
+                                        React.createElement('option', { value: "" }, "Choose client..."),
+                                        getAvailableClients().map(client =>
+                                            React.createElement('option', { key: client, value: client }, client)
+                                        )
+                                    )
+                                ),
+                                React.createElement('div', null,
+                                    React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-2" }, "2. Select Project"),
+                                    React.createElement('select', {
+                                        value: selectedProjectName,
+                                        onChange: (e) => handleProjectNameChange(e.target.value),
+                                        className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
+                                        disabled: !selectedClient || isTracking
+                                    },
+                                        React.createElement('option', { value: "" }, "Choose project..."),
+                                        getAvailableProjectNames(selectedClient).map(project =>
+                                            React.createElement('option', { key: project, value: project }, project)
+                                        )
+                                    )
+                                ),
+                                React.createElement('div', null,
+                                    React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-2" }, "3. Select Task"),
+                                    React.createElement('select', {
+                                        value: selectedTaskCode,
+                                        onChange: (e) => handleTaskCodeChange(e.target.value),
+                                        className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
+                                        disabled: !selectedProjectName || isTracking
+                                    },
+                                        React.createElement('option', { value: "" }, "Choose task..."),
+                                        getAvailableTaskCodes(selectedClient, selectedProjectName).map(task =>
+                                            React.createElement('option', { key: task, value: task }, task)
+                                        )
+                                    )
+                                ),
+                                React.createElement('div', null,
+                                    React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-2" }, "4. Select Subtask"),
+                                    React.createElement('select', {
+                                        value: selectedProject,
+                                        onChange: (e) => {
+                                            if (isTracking) {
+                                                switchProject(parseInt(e.target.value));
+                                            } else {
+                                                handleSubtaskCodeChange(e.target.value);
+                                            }
+                                        },
+                                        className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
+                                        disabled: !selectedTaskCode
+                                    },
+                                        React.createElement('option', { value: "" }, "Choose subtask..."),
+                                        getAvailableSubtaskCodes(selectedClient, selectedProjectName, selectedTaskCode).map(subtask =>
+                                            React.createElement('option', { key: subtask.id, value: subtask.id }, subtask.subtaskCode + " (" + subtask.code + ")")
+                                        )
+                                    )
+                                )
                             ),
                             React.createElement('div', { className: "mt-4" },
                                 React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-3" }, "Comment (Optional)"),
