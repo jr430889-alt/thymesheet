@@ -185,8 +185,9 @@
         }, React.createElement('path', { d: 'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z' }));
 
         // Listen for IPC messages from main process
+        let ipcRenderer = null;
         if (typeof require !== 'undefined') {
-            const { ipcRenderer } = require('electron');
+            ipcRenderer = require('electron').ipcRenderer;
 
             window.toggleTimerFromTray = () => {
                 if (window.currentTimerToggle) {
@@ -227,7 +228,60 @@
             ipcRenderer.on('show-guide', () => {
                 window.showGuideFromMenu();
             });
+
+            ipcRenderer.on('export-data-request', () => {
+                if (window.exportAllData) {
+                    window.exportAllData();
+                }
+            });
+
+            ipcRenderer.on('import-data-request', () => {
+                if (window.importAllData) {
+                    window.importAllData();
+                }
+            });
         }
+
+        // Helper functions for file-based data storage
+        const loadDataFromFile = async () => {
+            if (!ipcRenderer) {
+                // Fallback to localStorage if not in Electron
+                return {
+                    projectCodes: JSON.parse(localStorage.getItem('projectCodes') || '[]'),
+                    timeEntries: JSON.parse(localStorage.getItem('timeEntries') || '[]'),
+                    recentProjects: JSON.parse(localStorage.getItem('recentProjects') || '[]'),
+                    settings: JSON.parse(localStorage.getItem('settings') || '{}')
+                };
+            }
+
+            try {
+                const result = await ipcRenderer.invoke('load-data');
+                if (result.success && result.data) {
+                    return result.data;
+                }
+                return null;
+            } catch (error) {
+                console.error('Error loading data:', error);
+                return null;
+            }
+        };
+
+        const saveDataToFile = async (data) => {
+            if (!ipcRenderer) {
+                // Fallback to localStorage if not in Electron
+                localStorage.setItem('projectCodes', JSON.stringify(data.projectCodes));
+                localStorage.setItem('timeEntries', JSON.stringify(data.timeEntries));
+                localStorage.setItem('recentProjects', JSON.stringify(data.recentProjects));
+                localStorage.setItem('settings', JSON.stringify(data.settings));
+                return;
+            }
+
+            try {
+                await ipcRenderer.invoke('save-data', data);
+            } catch (error) {
+                console.error('Error saving data:', error);
+            }
+        };
 
         const TimeTracker = () => {
             const [projectCodes, setProjectCodes] = useState([]);
@@ -281,89 +335,76 @@
             const [selectedTaskCode, setSelectedTaskCode] = useState('');
             const [selectedSubtaskCode, setSelectedSubtaskCode] = useState('');
 
-            // Load data from localStorage
+            // Load data from file system
             useEffect(() => {
-                try {
-                    const savedCodes = localStorage.getItem('projectCodes');
-                    const savedEntries = localStorage.getItem('timeEntries');
-                    const savedRecent = localStorage.getItem('recentProjects');
-                    const savedSettings = localStorage.getItem('settings');
+                const loadData = async () => {
+                    try {
+                        const data = await loadDataFromFile();
 
-                    if (savedCodes) {
-                        const codes = JSON.parse(savedCodes);
-                        setProjectCodes(codes);
-                        if (codes.length === 0) {
+                        if (data && data.projectCodes) {
+                            setProjectCodes(data.projectCodes);
+                            if (data.projectCodes.length === 0) {
+                                setShowSetup(true);
+                            }
+                        } else {
                             setShowSetup(true);
                         }
-                    } else {
+
+                        if (data && data.timeEntries) {
+                            setTimeEntries(data.timeEntries);
+                        }
+
+                        if (data && data.recentProjects) {
+                            setRecentProjects(data.recentProjects);
+                        }
+
+                        if (data && data.settings) {
+                            const settings = data.settings;
+                            setTimeRounding(settings.timeRounding || 'none');
+                            setAutoPauseEnabled(settings.autoPauseEnabled || false);
+                            setAutoPauseMinutes(settings.autoPauseMinutes || 15);
+                            setCompactMode(settings.compactMode || false);
+                            setDailyGoalEnabled(settings.dailyGoalEnabled || false);
+                            setDailyGoalHours(settings.dailyGoalHours || 8);
+                        }
+                    } catch (error) {
+                        console.error('Error loading data:', error);
+                        setStorageError('Failed to load data');
                         setShowSetup(true);
                     }
+                };
 
-                    if (savedEntries) {
-                        setTimeEntries(JSON.parse(savedEntries));
-                    }
-
-                    if (savedRecent) {
-                        setRecentProjects(JSON.parse(savedRecent));
-                    }
-
-                    if (savedSettings) {
-                        const settings = JSON.parse(savedSettings);
-                        setTimeRounding(settings.timeRounding || 'none');
-                        setAutoPauseEnabled(settings.autoPauseEnabled || false);
-                        setAutoPauseMinutes(settings.autoPauseMinutes || 15);
-                        setCompactMode(settings.compactMode || false);
-                        setDailyGoalEnabled(settings.dailyGoalEnabled || false);
-                        setDailyGoalHours(settings.dailyGoalHours || 8);
-                    }
-                } catch (error) {
-                    console.log('Storage not available');
-                    setStorageError('Local storage unavailable - data will not persist');
-                    setShowSetup(true);
-                }
+                loadData();
             }, []);
 
-            // Save settings
+            // Save all data to file whenever anything changes
             useEffect(() => {
-                try {
-                    const settings = {
-                        timeRounding,
-                        autoPauseEnabled,
-                        autoPauseMinutes,
-                        compactMode,
-                        dailyGoalEnabled,
-                        dailyGoalHours
-                    };
-                    localStorage.setItem('settings', JSON.stringify(settings));
-                } catch (error) {
-                    console.log('Failed to save settings');
-                }
-            }, [timeRounding, autoPauseEnabled, autoPauseMinutes, compactMode, dailyGoalEnabled, dailyGoalHours]);
+                const saveData = async () => {
+                    try {
+                        const settings = {
+                            timeRounding,
+                            autoPauseEnabled,
+                            autoPauseMinutes,
+                            compactMode,
+                            dailyGoalEnabled,
+                            dailyGoalHours
+                        };
 
-            // Save data
-            useEffect(() => {
-                try {
-                    localStorage.setItem('projectCodes', JSON.stringify(projectCodes));
-                } catch (error) {
-                    setStorageError('Failed to save project codes');
-                }
-            }, [projectCodes]);
+                        await saveDataToFile({
+                            projectCodes,
+                            timeEntries,
+                            recentProjects,
+                            settings
+                        });
+                    } catch (error) {
+                        console.error('Failed to save data:', error);
+                    }
+                };
 
-            useEffect(() => {
-                try {
-                    localStorage.setItem('timeEntries', JSON.stringify(timeEntries));
-                } catch (error) {
-                    setStorageError('Failed to save time entries');
-                }
-            }, [timeEntries]);
-
-            useEffect(() => {
-                try {
-                    localStorage.setItem('recentProjects', JSON.stringify(recentProjects));
-                } catch (error) {
-                    console.log('Failed to save recent projects');
-                }
-            }, [recentProjects]);
+                // Debounce saves to avoid too many writes
+                const timeoutId = setTimeout(saveData, 500);
+                return () => clearTimeout(timeoutId);
+            }, [projectCodes, timeEntries, recentProjects, timeRounding, autoPauseEnabled, autoPauseMinutes, compactMode, dailyGoalEnabled, dailyGoalHours]);
 
             // Activity tracking for auto-pause
             useEffect(() => {
@@ -539,6 +580,47 @@
 
                 window.navigateTo = (page) => {
                     setShowSetup(page === 'manage');
+                };
+
+                window.exportAllData = async () => {
+                    if (!ipcRenderer) return;
+                    try {
+                        const result = await ipcRenderer.invoke('export-data');
+                        if (result.success && !result.canceled) {
+                            setStorageError('Data exported successfully to: ' + result.path);
+                            setTimeout(() => setStorageError(null), 5000);
+                        }
+                    } catch (error) {
+                        setStorageError('Export failed: ' + error.message);
+                    }
+                };
+
+                window.importAllData = async () => {
+                    if (!ipcRenderer) return;
+                    try {
+                        const result = await ipcRenderer.invoke('import-data');
+                        if (result.success && !result.canceled) {
+                            // Reload data after import
+                            const data = await loadDataFromFile();
+                            if (data) {
+                                setProjectCodes(data.projectCodes || []);
+                                setTimeEntries(data.timeEntries || []);
+                                setRecentProjects(data.recentProjects || []);
+                                if (data.settings) {
+                                    setTimeRounding(data.settings.timeRounding || 'none');
+                                    setAutoPauseEnabled(data.settings.autoPauseEnabled || false);
+                                    setAutoPauseMinutes(data.settings.autoPauseMinutes || 15);
+                                    setCompactMode(data.settings.compactMode || false);
+                                    setDailyGoalEnabled(data.settings.dailyGoalEnabled || false);
+                                    setDailyGoalHours(data.settings.dailyGoalHours || 8);
+                                }
+                                setStorageError('Data imported successfully! Please restart the app to see all changes.');
+                                setTimeout(() => setStorageError(null), 5000);
+                            }
+                        }
+                    } catch (error) {
+                        setStorageError('Import failed: ' + error.message);
+                    }
                 };
             }, [isTracking, selectedProject]);
 

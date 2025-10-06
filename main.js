@@ -1,8 +1,96 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let mainWindow;
 let tray;
+
+// Data storage path - survives uninstall/reinstall
+const userDataPath = path.join(app.getPath('documents'), 'ThymeSheet');
+const dataFilePath = path.join(userDataPath, 'thymesheet-data.json');
+
+// Ensure data directory exists
+if (!fs.existsSync(userDataPath)) {
+  fs.mkdirSync(userDataPath, { recursive: true });
+}
+
+// IPC Handlers for data operations
+ipcMain.handle('load-data', () => {
+  try {
+    if (fs.existsSync(dataFilePath)) {
+      const data = fs.readFileSync(dataFilePath, 'utf8');
+      return { success: true, data: JSON.parse(data) };
+    }
+    return { success: true, data: null };
+  } catch (error) {
+    console.error('Error loading data:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('save-data', (event, data) => {
+  try {
+    fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf8');
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving data:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('export-data', async () => {
+  try {
+    const timestamp = new Date().toISOString().split('T')[0];
+    const { filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export All Data',
+      defaultPath: `thymesheet-backup-${timestamp}.json`,
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (filePath && fs.existsSync(dataFilePath)) {
+      const data = fs.readFileSync(dataFilePath, 'utf8');
+      fs.writeFileSync(filePath, data, 'utf8');
+      return { success: true, path: filePath };
+    }
+    return { success: false, canceled: true };
+  } catch (error) {
+    console.error('Error exporting data:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('import-data', async () => {
+  try {
+    const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import Data',
+      properties: ['openFile'],
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (filePaths && filePaths.length > 0) {
+      const data = fs.readFileSync(filePaths[0], 'utf8');
+      // Validate it's proper JSON
+      JSON.parse(data);
+      // Copy to main data file
+      fs.writeFileSync(dataFilePath, data, 'utf8');
+      return { success: true };
+    }
+    return { success: false, canceled: true };
+  } catch (error) {
+    console.error('Error importing data:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-data-location', () => {
+  return userDataPath;
+});
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -26,6 +114,28 @@ function createWindow() {
     {
       label: 'File',
       submenu: [
+        {
+          label: 'Export All Data...',
+          accelerator: 'CommandOrControl+E',
+          click: () => {
+            mainWindow.webContents.send('export-data-request');
+          }
+        },
+        {
+          label: 'Import Data...',
+          accelerator: 'CommandOrControl+I',
+          click: () => {
+            mainWindow.webContents.send('import-data-request');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Show Data Folder',
+          click: () => {
+            require('electron').shell.openPath(userDataPath);
+          }
+        },
+        { type: 'separator' },
         {
           label: 'Quit',
           accelerator: 'CommandOrControl+Q',
