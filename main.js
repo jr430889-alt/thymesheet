@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain } = require('electron');
 const path = require('path');
 
 let mainWindow;
@@ -8,14 +8,149 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: path.join(__dirname, 'icon.ico'),
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      enableRemoteModule: false,
+      backgroundThrottling: false
     },
-    show: false
+    show: false,
+    backgroundColor: '#ffffff'
   });
 
   mainWindow.loadFile('Jeremy-Time-Tracker.html');
+
+  // Create application menu
+  const menuTemplate = [
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Quit',
+          accelerator: 'CommandOrControl+Q',
+          click: () => {
+            app.isQuiting = true;
+            app.quit();
+          }
+        }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Track Time',
+          click: () => {
+            mainWindow.webContents.send('navigate-to', 'track');
+          }
+        },
+        {
+          label: 'Manage Projects',
+          click: () => {
+            mainWindow.webContents.send('navigate-to', 'manage');
+          }
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'toggleDevTools' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        {
+          label: 'Hide to Tray',
+          accelerator: 'CommandOrControl+H',
+          click: () => {
+            mainWindow.hide();
+          }
+        }
+      ]
+    },
+    {
+      label: 'Settings',
+      submenu: [
+        {
+          label: 'Time Rounding',
+          click: () => {
+            mainWindow.webContents.send('open-settings');
+          }
+        },
+        {
+          label: 'Auto-Pause Detection',
+          click: () => {
+            mainWindow.webContents.send('open-settings');
+          }
+        },
+        {
+          label: 'Compact Mode',
+          click: () => {
+            mainWindow.webContents.send('open-settings');
+          }
+        },
+        {
+          label: 'Daily Goal',
+          click: () => {
+            mainWindow.webContents.send('open-settings');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'All Settings...',
+          accelerator: 'CommandOrControl+,',
+          click: () => {
+            mainWindow.webContents.send('open-settings');
+          }
+        }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Getting Started Guide',
+          click: () => {
+            mainWindow.webContents.send('show-guide');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'About ThymeSheet',
+          click: () => {
+            const { dialog } = require('electron');
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'About ThymeSheet',
+              message: 'ThymeSheet',
+              detail: 'A professional time tracking application\n\nVersion 2.0'
+            });
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(menuTemplate);
+  Menu.setApplicationMenu(menu);
+
+  // Uncomment the line below to open DevTools for debugging
+  // mainWindow.webContents.openDevTools();
 
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
@@ -30,30 +165,13 @@ function createWindow() {
 }
 
 function createTray() {
-  // Create a simple 16x16 black square as tray icon
-  const icon = nativeImage.createEmpty();
-
-  // Create a simple icon programmatically
-  const canvas = {
-    width: 16,
-    height: 16,
-    data: Buffer.alloc(16 * 16 * 4) // RGBA
-  };
-
-  // Fill with dark pixels to make it visible
-  for (let i = 0; i < canvas.data.length; i += 4) {
-    canvas.data[i] = 100;     // R
-    canvas.data[i + 1] = 100; // G
-    canvas.data[i + 2] = 100; // B
-    canvas.data[i + 3] = 255; // A
-  }
-
-  const trayIcon = nativeImage.createFromBitmap(canvas.data, { width: 16, height: 16 });
+  // Load the ThymeSheet tray icon
+  const trayIcon = nativeImage.createFromPath(path.join(__dirname, 'trayimage.ico'));
   tray = new Tray(trayIcon);
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show Time Tracker',
+      label: 'Show ThymeSheet',
       click: () => {
         mainWindow.show();
       }
@@ -75,11 +193,18 @@ function createTray() {
     }
   ]);
 
-  tray.setToolTip("Jeremy's Time Tracker");
+  tray.setToolTip("ThymeSheet");
   tray.setContextMenu(contextMenu);
 
   tray.on('double-click', () => {
     mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
+  });
+
+  // Listen for tray tooltip updates from renderer
+  ipcMain.on('update-tray-tooltip', (event, tooltipText) => {
+    if (tray) {
+      tray.setToolTip(tooltipText);
+    }
   });
 }
 
@@ -88,7 +213,7 @@ app.whenReady().then(() => {
   createTray();
 
   // Register global hotkeys
-  const ret = globalShortcut.register('CommandOrControl+Shift+X', () => {
+  const ret = globalShortcut.register('CommandOrControl+Shift+Z', () => {
     console.log('Hotkey triggered - Window visible:', mainWindow.isVisible(), 'Window focused:', mainWindow.isFocused());
 
     if (mainWindow.isVisible() && mainWindow.isFocused()) {
@@ -119,7 +244,7 @@ app.whenReady().then(() => {
   });
 
   if (!ret) {
-    console.log('Registration failed for Ctrl+Shift+X');
+    console.log('Registration failed for Ctrl+Shift+Z');
   }
 
   if (!ret2) {

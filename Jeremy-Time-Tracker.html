@@ -3,12 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jeremy's Time Tracker</title>
+    <title>ThymeSheet</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --deep-green: #1C5A3F;
+            --eggplant: #4B2E39;
+            --off-white: #F9F8F7;
+            --soft-gray: #EAEAEA;
+            --pearl: #F5F3F0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: var(--off-white);
+            margin: 0;
+            padding: 0;
+            color: #2D2D2D;
+            line-height: 1.6;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'deep-green': '#1C5A3F',
+                        'eggplant': '#4B2E39',
+                        'off-white': '#F9F8F7',
+                        'soft-gray': '#EAEAEA',
+                        'pearl': '#F5F3F0',
+                    },
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    borderRadius: {
+                        'subtle': '5px',
+                    }
+                }
+            }
+        }
+    </script>
 </head>
 <body>
     <div id="root"></div>
@@ -16,39 +61,173 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // Debug: Check what lucide contains
-        console.log('Lucide object:', lucide);
+        // Lucide-style icons using SVG
+        const Clock = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round',
+            style: { display: 'inline-block', verticalAlign: 'middle' }
+        }, React.createElement('circle', { cx: '12', cy: '12', r: '10' }), React.createElement('polyline', { points: '12 6 12 12 16 14' }));
 
-        // Listen for IPC messages from main process (for Electron tray integration)
+        const Square = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('rect', { x: '3', y: '3', width: '18', height: '18', rx: '2', ry: '2' }));
+
+        const Download = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }), React.createElement('polyline', { points: '7 10 12 15 17 10' }), React.createElement('line', { x1: '12', y1: '15', x2: '12', y2: '3' }));
+
+        const Upload = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }), React.createElement('polyline', { points: '17 8 12 3 7 8' }), React.createElement('line', { x1: '12', y1: '3', x2: '12', y2: '15' }));
+
+        const Plus = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('line', { x1: '12', y1: '5', x2: '12', y2: '19' }), React.createElement('line', { x1: '5', y1: '12', x2: '19', y2: '12' }));
+
+        const Trash2 = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('polyline', { points: '3 6 5 6 21 6' }), React.createElement('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }), React.createElement('line', { x1: '10', y1: '11', x2: '10', y2: '17' }), React.createElement('line', { x1: '14', y1: '11', x2: '14', y2: '17' }));
+
+        const Settings = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('circle', { cx: '12', cy: '12', r: '3' }), React.createElement('path', { d: 'M12 1v6m0 6v6m5.657-13.657l-4.243 4.243m-2.828 2.828l-4.243 4.243M23 12h-6m-6 0H1m18.364-5.657l-4.243 4.243m-2.828 2.828l-4.243 4.243' }));
+
+        const Building = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('rect', { x: '4', y: '2', width: '16', height: '20', rx: '2', ry: '2' }), React.createElement('path', { d: 'M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01' }));
+
+        const Folder = () => React.createElement('svg', {
+            width: '18',
+            height: '18',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('path', { d: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z' }));
+
+        const Tag = () => React.createElement('svg', {
+            width: '18',
+            height: '18',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('path', { d: 'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z' }), React.createElement('line', { x1: '7', y1: '7', x2: '7.01', y2: '7' }));
+
+        const Bookmark = () => React.createElement('svg', {
+            width: '16',
+            height: '16',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('path', { d: 'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z' }));
+
+        // Listen for IPC messages from main process
         if (typeof require !== 'undefined') {
             const { ipcRenderer } = require('electron');
 
-            // Function to toggle timer from tray
             window.toggleTimerFromTray = () => {
-                // This will be set up after the component mounts
                 if (window.currentTimerToggle) {
                     window.currentTimerToggle();
                 }
             };
 
-            // Listen for toggle-timer message from tray
+            window.openSettingsFromMenu = () => {
+                if (window.openSettings) {
+                    window.openSettings();
+                }
+            };
+
+            window.navigateToPage = (page) => {
+                if (window.navigateTo) {
+                    window.navigateTo(page);
+                }
+            };
+
             ipcRenderer.on('toggle-timer', () => {
                 window.toggleTimerFromTray();
             });
-        }
 
-        // Simple fallback - use text if icons don't work
-        const Play = () => React.createElement('span', null, '▶');
-        const Pause = () => React.createElement('span', null, '⏸');
-        const Square = () => React.createElement('span', null, '⏹');
-        const Download = () => React.createElement('span', null, '⬇');
-        const Clock = () => React.createElement('span', null, '🕐');
-        const Calendar = () => React.createElement('span', null, '📅');
-        const BarChart3 = () => React.createElement('span', null, '📊');
-        const Plus = () => React.createElement('span', null, '+');
-        const Edit2 = () => React.createElement('span', null, '✏');
-        const Trash2 = () => React.createElement('span', null, '🗑');
-        const Settings = () => React.createElement('span', null, '⚙');
+            ipcRenderer.on('open-settings', () => {
+                window.openSettingsFromMenu();
+            });
+
+            ipcRenderer.on('navigate-to', (event, page) => {
+                window.navigateToPage(page);
+            });
+
+            window.showGuideFromMenu = () => {
+                if (window.showGuide) {
+                    window.showGuide();
+                }
+            };
+
+            ipcRenderer.on('show-guide', () => {
+                window.showGuideFromMenu();
+            });
+        }
 
         const TimeTracker = () => {
             const [projectCodes, setProjectCodes] = useState([]);
@@ -58,17 +237,52 @@
             const [currentSession, setCurrentSession] = useState(null);
             const [elapsedTime, setElapsedTime] = useState(0);
             const [showSetup, setShowSetup] = useState(false);
-            const [newProjectCode, setNewProjectCode] = useState('');
-            const [newProjectDescription, setNewProjectDescription] = useState('');
             const [storageError, setStorageError] = useState(null);
             const intervalRef = useRef(null);
 
-            // Load data from localStorage on component mount
+            // New state for 4-field structure
+            const [newClientName, setNewClientName] = useState('');
+            const [newProjectName, setNewProjectName] = useState('');
+            const [newTaskCode, setNewTaskCode] = useState('');
+            const [newSubtaskCode, setNewSubtaskCode] = useState('');
+
+            // New state for comments
+            const [currentComment, setCurrentComment] = useState('');
+
+            // New state for recent projects
+            const [recentProjects, setRecentProjects] = useState([]);
+
+            // New state for settings
+            const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+            const [showGuideModal, setShowGuideModal] = useState(false);
+            const [timeRounding, setTimeRounding] = useState('none');
+            const [autoPauseEnabled, setAutoPauseEnabled] = useState(false);
+            const [autoPauseMinutes, setAutoPauseMinutes] = useState(15);
+            const [compactMode, setCompactMode] = useState(false);
+            const [dailyGoalEnabled, setDailyGoalEnabled] = useState(false);
+            const [dailyGoalHours, setDailyGoalHours] = useState(8);
+            const [lastActivityTime, setLastActivityTime] = useState(Date.now());
+
+            // Search and hierarchy state
+            const [projectSearchTerm, setProjectSearchTerm] = useState('');
+            const [expandedClients, setExpandedClients] = useState({});
+            const [expandedProjects, setExpandedProjects] = useState({});
+            const [expandedTasks, setExpandedTasks] = useState({});
+
+            // CSV filter state
+            const [filterStartDate, setFilterStartDate] = useState('');
+            const [filterEndDate, setFilterEndDate] = useState('');
+            const [filterClient, setFilterClient] = useState('');
+            const [filterProject, setFilterProject] = useState('');
+
+            // Load data from localStorage
             useEffect(() => {
                 try {
                     const savedCodes = localStorage.getItem('projectCodes');
                     const savedEntries = localStorage.getItem('timeEntries');
-                    
+                    const savedRecent = localStorage.getItem('recentProjects');
+                    const savedSettings = localStorage.getItem('settings');
+
                     if (savedCodes) {
                         const codes = JSON.parse(savedCodes);
                         setProjectCodes(codes);
@@ -78,23 +292,54 @@
                     } else {
                         setShowSetup(true);
                     }
-                    
+
                     if (savedEntries) {
                         setTimeEntries(JSON.parse(savedEntries));
                     }
+
+                    if (savedRecent) {
+                        setRecentProjects(JSON.parse(savedRecent));
+                    }
+
+                    if (savedSettings) {
+                        const settings = JSON.parse(savedSettings);
+                        setTimeRounding(settings.timeRounding || 'none');
+                        setAutoPauseEnabled(settings.autoPauseEnabled || false);
+                        setAutoPauseMinutes(settings.autoPauseMinutes || 15);
+                        setCompactMode(settings.compactMode || false);
+                        setDailyGoalEnabled(settings.dailyGoalEnabled || false);
+                        setDailyGoalHours(settings.dailyGoalHours || 8);
+                    }
                 } catch (error) {
-                    console.log('Storage not available, using session data');
+                    console.log('Storage not available');
                     setStorageError('Local storage unavailable - data will not persist');
                     setShowSetup(true);
                 }
             }, []);
 
-            // Save data to localStorage
+            // Save settings
+            useEffect(() => {
+                try {
+                    const settings = {
+                        timeRounding,
+                        autoPauseEnabled,
+                        autoPauseMinutes,
+                        compactMode,
+                        dailyGoalEnabled,
+                        dailyGoalHours
+                    };
+                    localStorage.setItem('settings', JSON.stringify(settings));
+                } catch (error) {
+                    console.log('Failed to save settings');
+                }
+            }, [timeRounding, autoPauseEnabled, autoPauseMinutes, compactMode, dailyGoalEnabled, dailyGoalHours]);
+
+            // Save data
             useEffect(() => {
                 try {
                     localStorage.setItem('projectCodes', JSON.stringify(projectCodes));
                 } catch (error) {
-                    setStorageError('Failed to save project codes - data may not persist');
+                    setStorageError('Failed to save project codes');
                 }
             }, [projectCodes]);
 
@@ -102,15 +347,69 @@
                 try {
                     localStorage.setItem('timeEntries', JSON.stringify(timeEntries));
                 } catch (error) {
-                    setStorageError('Failed to save time entries - data may not persist');
+                    setStorageError('Failed to save time entries');
                 }
             }, [timeEntries]);
 
-            // Timer effect
+            useEffect(() => {
+                try {
+                    localStorage.setItem('recentProjects', JSON.stringify(recentProjects));
+                } catch (error) {
+                    console.log('Failed to save recent projects');
+                }
+            }, [recentProjects]);
+
+            // Activity tracking for auto-pause
+            useEffect(() => {
+                const updateActivity = () => {
+                    setLastActivityTime(Date.now());
+                };
+
+                if (autoPauseEnabled && isTracking) {
+                    window.addEventListener('mousemove', updateActivity);
+                    window.addEventListener('keydown', updateActivity);
+                    window.addEventListener('click', updateActivity);
+
+                    return () => {
+                        window.removeEventListener('mousemove', updateActivity);
+                        window.removeEventListener('keydown', updateActivity);
+                        window.removeEventListener('click', updateActivity);
+                    };
+                }
+            }, [autoPauseEnabled, isTracking]);
+
+            // Timer effect with auto-pause check
             useEffect(() => {
                 if (isTracking && currentSession) {
                     intervalRef.current = setInterval(() => {
                         setElapsedTime(Date.now() - currentSession.startTime);
+
+                        // Check for idle time
+                        if (autoPauseEnabled) {
+                            const idleTime = Date.now() - lastActivityTime;
+                            const idleThreshold = autoPauseMinutes * 60 * 1000;
+
+                            if (idleTime > idleThreshold) {
+                                clearInterval(intervalRef.current);
+                                const confirmStop = window.confirm(
+                                    "You've been idle for " + autoPauseMinutes + " minutes.\n\nWere you still working on \"" + currentSession.projectCode + "\"?"
+                                );
+
+                                if (!confirmStop) {
+                                    setIsTracking(false);
+                                    setCurrentSession(null);
+                                    setElapsedTime(0);
+                                    setCurrentComment('');
+                                } else {
+                                    setLastActivityTime(Date.now());
+                                    if (isTracking && currentSession) {
+                                        intervalRef.current = setInterval(() => {
+                                            setElapsedTime(Date.now() - currentSession.startTime);
+                                        }, 1000);
+                                    }
+                                }
+                            }
+                        }
                     }, 1000);
                 } else {
                     if (intervalRef.current) {
@@ -123,36 +422,68 @@
                         clearInterval(intervalRef.current);
                     }
                 };
-            }, [isTracking, currentSession]);
+            }, [isTracking, currentSession, autoPauseEnabled, autoPauseMinutes, lastActivityTime]);
 
             const formatTime = (milliseconds) => {
                 const seconds = Math.floor(milliseconds / 1000);
                 const hours = Math.floor(seconds / 3600);
                 const minutes = Math.floor((seconds % 3600) / 60);
                 const remainingSeconds = seconds % 60;
-                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+                return hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':' + remainingSeconds.toString().padStart(2, '0');
+            };
+
+            const getTodaysTotalHours = () => {
+                const today = new Date().toISOString().split('T')[0];
+                const todaysEntries = timeEntries.filter(entry => entry.date === today);
+                const totalHours = todaysEntries.reduce((sum, entry) => sum + entry.hours, 0);
+
+                if (isTracking && currentSession && currentSession.date === today) {
+                    const currentHours = elapsedTime / (1000 * 60 * 60);
+                    return totalHours + currentHours;
+                }
+                return totalHours;
+            };
+
+            const roundTime = (milliseconds) => {
+                if (timeRounding === 'none') return milliseconds;
+                const minutes = milliseconds / (1000 * 60);
+                const roundTo = parseInt(timeRounding);
+                const roundedMinutes = Math.round(minutes / roundTo) * roundTo;
+                return roundedMinutes * 60 * 1000;
             };
 
             const addProjectCode = () => {
-                if (!newProjectCode.trim() || !newProjectDescription.trim()) {
-                    setStorageError('Please enter both project code and description');
+                if (!newClientName.trim() || !newProjectName.trim() || !newTaskCode.trim() || !newSubtaskCode.trim()) {
+                    setStorageError('Please fill in all 4 fields');
                     return;
                 }
 
                 const newProject = {
                     id: Date.now() + Math.random(),
-                    code: newProjectCode.trim().toUpperCase(),
-                    description: newProjectDescription.trim()
+                    clientName: newClientName.trim(),
+                    projectName: newProjectName.trim(),
+                    taskCode: newTaskCode.trim().toUpperCase(),
+                    subtaskCode: newSubtaskCode.trim().toUpperCase(),
+                    code: newTaskCode.trim().toUpperCase() + '-' + newSubtaskCode.trim().toUpperCase()
                 };
 
                 setProjectCodes(prev => [...prev, newProject]);
-                setNewProjectCode('');
-                setNewProjectDescription('');
+                setNewClientName('');
+                setNewProjectName('');
+                setNewTaskCode('');
+                setNewSubtaskCode('');
                 setStorageError(null);
             };
 
             const deleteProjectCode = (id) => {
                 setProjectCodes(prev => prev.filter(project => project.id !== id));
+            };
+
+            const updateRecentProjects = (projectId) => {
+                setRecentProjects(prev => {
+                    const newRecent = [projectId, ...prev.filter(id => id !== projectId)].slice(0, 5);
+                    return newRecent;
+                });
             };
 
             const startTracking = () => {
@@ -167,7 +498,10 @@
                 const session = {
                     projectId: project.id,
                     projectCode: project.code,
-                    projectDescription: project.description,
+                    clientName: project.clientName,
+                    projectName: project.projectName,
+                    taskCode: project.taskCode,
+                    subtaskCode: project.subtaskCode,
                     startTime: Date.now(),
                     date: new Date().toISOString().split('T')[0]
                 };
@@ -176,9 +510,10 @@
                 setIsTracking(true);
                 setElapsedTime(0);
                 setStorageError(null);
+                setLastActivityTime(Date.now());
+                updateRecentProjects(project.id);
             };
 
-            // Expose timer toggle to global scope for tray integration
             useEffect(() => {
                 window.currentTimerToggle = () => {
                     if (isTracking) {
@@ -187,29 +522,46 @@
                         startTracking();
                     }
                 };
+
+                window.openSettings = () => {
+                    setShowSettingsMenu(true);
+                };
+
+                window.showGuide = () => {
+                    setShowGuideModal(true);
+                };
+
+                window.navigateTo = (page) => {
+                    setShowSetup(page === 'manage');
+                };
             }, [isTracking, selectedProject]);
 
             const stopTracking = () => {
                 if (currentSession) {
                     const endTime = Date.now();
-                    const duration = endTime - currentSession.startTime;
-                    
+                    const duration = roundTime(endTime - currentSession.startTime);
+
                     const newEntry = {
                         id: Date.now() + Math.random(),
                         projectId: currentSession.projectId,
                         projectCode: currentSession.projectCode,
-                        projectDescription: currentSession.projectDescription,
+                        clientName: currentSession.clientName,
+                        projectName: currentSession.projectName,
+                        taskCode: currentSession.taskCode,
+                        subtaskCode: currentSession.subtaskCode,
                         date: currentSession.date,
                         startTime: new Date(currentSession.startTime).toLocaleTimeString(),
                         endTime: new Date(endTime).toLocaleTimeString(),
                         duration: duration,
-                        hours: duration / (1000 * 60 * 60)
+                        hours: duration / (1000 * 60 * 60),
+                        comment: currentComment
                     };
 
                     setTimeEntries(prev => [...prev, newEntry]);
                     setIsTracking(false);
                     setCurrentSession(null);
                     setElapsedTime(0);
+                    setCurrentComment('');
                 }
             };
 
@@ -219,21 +571,27 @@
                 if (isTracking) {
                     stopTracking();
 
-                    // Start tracking the new project immediately after stopping
-                    const project = projectCodes.find(p => p.id === newProjectId);
-                    if (project) {
-                        const session = {
-                            projectId: project.id,
-                            projectCode: project.code,
-                            projectDescription: project.description,
-                            startTime: Date.now(),
-                            date: new Date().toISOString().split('T')[0]
-                        };
+                    setTimeout(() => {
+                        const project = projectCodes.find(p => p.id === newProjectId);
+                        if (project) {
+                            const session = {
+                                projectId: project.id,
+                                projectCode: project.code,
+                                clientName: project.clientName,
+                                projectName: project.projectName,
+                                taskCode: project.taskCode,
+                                subtaskCode: project.subtaskCode,
+                                startTime: Date.now(),
+                                date: new Date().toISOString().split('T')[0]
+                            };
 
-                        setCurrentSession(session);
-                        setIsTracking(true);
-                        setElapsedTime(0);
-                    }
+                            setCurrentSession(session);
+                            setIsTracking(true);
+                            setElapsedTime(0);
+                            setLastActivityTime(Date.now());
+                            updateRecentProjects(project.id);
+                        }
+                    }, 100);
                 }
             };
 
@@ -241,401 +599,1258 @@
                 setTimeEntries(prev => prev.filter(entry => entry.id !== id));
             };
 
-            const getMonthlyEntries = () => {
-                const currentMonth = new Date().getMonth();
-                const currentYear = new Date().getFullYear();
-
-                return timeEntries.filter(entry => {
-                    const entryDate = new Date(entry.date);
-                    return entryDate.getMonth() === currentMonth && entryDate.getFullYear() === currentYear;
-                });
-            };
-
-            const generateMonthlyTimesheet = () => {
-                const monthlyEntries = getMonthlyEntries();
-                const projectSummary = {};
-
-                monthlyEntries.forEach(entry => {
-                    if (!projectSummary[entry.projectCode]) {
-                        projectSummary[entry.projectCode] = {
-                            code: entry.projectCode,
-                            description: entry.projectDescription,
-                            totalHours: 0,
-                            entries: []
-                        };
-                    }
-                    projectSummary[entry.projectCode].totalHours += entry.hours;
-                    projectSummary[entry.projectCode].entries.push(entry);
-                });
-
-                return projectSummary;
-            };
-
-            const exportToExcel = () => {
-                const monthlyData = generateMonthlyTimesheet();
-                const monthNames = ["January", "February", "March", "April", "May", "June",
-                    "July", "August", "September", "October", "November", "December"];
-                const currentMonth = monthNames[new Date().getMonth()];
-                const currentYear = new Date().getFullYear();
-
-                const summaryHeaders = ['Project Code', 'Description', 'Total Hours'];
-                const summaryRows = Object.values(monthlyData).map(project => [
-                    project.code,
-                    project.description,
-                    project.totalHours.toFixed(2)
-                ]);
-
-                const detailHeaders = ['Date', 'Project Code', 'Description', 'Start Time', 'End Time', 'Hours'];
-                const detailRows = getMonthlyEntries()
-                    .map(entry => [
-                        entry.date,
-                        entry.projectCode,
-                        entry.projectDescription,
-                        entry.startTime,
-                        entry.endTime,
-                        entry.hours.toFixed(2)
-                    ]);
-
-                const csvContent = [
-                    `Monthly Timesheet - ${currentMonth} ${currentYear}`,
-                    '',
-                    'PROJECT SUMMARY',
-                    summaryHeaders.join(','),
-                    ...summaryRows.map(row => row.join(',')),
-                    '',
-                    'DETAILED ENTRIES',
-                    detailHeaders.join(','),
-                    ...detailRows.map(row => row.join(','))
-                ].join('\n');
-
-                const blob = new Blob([csvContent], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `timesheet-${currentMonth.toLowerCase()}-${currentYear}.csv`;
-                a.click();
-                window.URL.revokeObjectURL(url);
-            };
-
-            const exportToQBO = () => {
-                const monthlyData = generateMonthlyTimesheet();
-
-                const qboHeaders = ['Date', 'Service Item', 'Description', 'Qty', 'Rate', 'Customer:Job'];
-                const qboRows = [];
-
-                Object.values(monthlyData).forEach(project => {
-                    project.entries.forEach(entry => {
-                        qboRows.push([
-                            entry.date,
-                            'Consulting Services',
-                            `${project.code} - ${project.description}`,
-                            entry.hours.toFixed(2),
-                            '',
-                            project.code
-                        ]);
-                    });
-                });
-
-                const csvContent = [
-                    qboHeaders.join(','),
-                    ...qboRows.map(row => row.join(','))
-                ].join('\n');
-
-                const blob = new Blob([csvContent], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `qbo-timesheet-${new Date().toISOString().split('T')[0]}.csv`;
-                a.click();
-                window.URL.revokeObjectURL(url);
-            };
-
-            const getTotalMonthlyHours = () => {
-                const monthlyData = generateMonthlyTimesheet();
-                return Object.values(monthlyData).reduce((total, project) => total + project.totalHours, 0);
-            };
-
             const addDemoData = () => {
                 const demoProjects = [
-                    { id: 1, code: 'ACME-001', description: 'Strategic Planning' },
-                    { id: 2, code: 'TECH-DEV', description: 'Software Development' },
-                    { id: 3, code: 'CONSULT-A', description: 'Business Analysis' }
+                    { id: 1, clientName: 'Orbital', projectName: 'O2-X Habitat Offsetting Plan', taskCode: '1. MEETINGS AND DELIVERY', subtaskCode: '1.1 PROJECT', code: '1. MEETINGS AND DELIVERY-1.1 PROJECT' },
+                    { id: 2, clientName: 'Orbital', projectName: 'O2-X Habitat Offsetting Plan', taskCode: '1. MEETINGS AND DELIVERY', subtaskCode: '1.2 INTERNAL', code: '1. MEETINGS AND DELIVERY-1.2 INTERNAL' },
+                    { id: 3, clientName: 'Orbital', projectName: 'O2-X Habitat Offsetting Plan', taskCode: '1. MEETINGS AND DELIVERY', subtaskCode: '1.3 REGULATORY', code: '1. MEETINGS AND DELIVERY-1.3 REGULATORY' }
                 ];
                 setProjectCodes(demoProjects);
                 setShowSetup(false);
             };
 
-            if (showSetup) {
-                return React.createElement('div', { className: "max-w-4xl mx-auto p-6 bg-white min-h-screen" },
-                    storageError && React.createElement('div', { className: "mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded" },
-                        storageError,
-                        React.createElement('button', {
-                            onClick: () => setStorageError(null),
-                            className: "ml-2 text-yellow-800 hover:text-yellow-900"
-                        }, "×")
-                    ),
-                    React.createElement('div', { className: "text-center mb-8" },
-                        React.createElement('h1', { className: "text-3xl font-bold text-gray-900 mb-2" }, "Setup Your Project Codes"),
-                        React.createElement('p', { className: "text-gray-600" }, "Add all your project codes and tasks upfront for consistent time tracking")
-                    ),
+            const downloadCSVTemplate = () => {
+                const csvContent = [
+                    'Client Name,Project/Admin Name,Task Code,Subtask Code',
+                    'Orbital,O2-X Habitat Offsetting Plan,1. Meetings and Delivery,1.1 Project',
+                    'Orbital,O2-X Habitat Offsetting Plan,1. Meetings and Delivery,1.2 Internal',
+                    'Orbital,O2-X Habitat Offsetting Plan,1. Meetings and Delivery,1.3 Regulatory'
+                ].join('\\n');
 
-                    React.createElement('div', { className: "bg-green-50 border border-green-200 rounded-lg p-4 mb-6" },
-                        React.createElement('h2', { className: "text-lg font-semibold text-green-800 mb-2" }, "🚀 Pro Tip: Use Hotkeys Anywhere!"),
-                        React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-3 text-sm" },
-                            React.createElement('div', { className: "flex items-center gap-2" },
-                                React.createElement('kbd', { className: "px-2 py-1 bg-white border border-gray-300 rounded text-xs font-mono" }, "Ctrl+Shift+X"),
-                                React.createElement('span', { className: "text-gray-700" }, "Show/Hide this app from anywhere")
-                            ),
-                            React.createElement('div', { className: "flex items-center gap-2" },
-                                React.createElement('kbd', { className: "px-2 py-1 bg-white border border-gray-300 rounded text-xs font-mono" }, "Ctrl+Shift+Space"),
-                                React.createElement('span', { className: "text-gray-700" }, "Start/Stop timer instantly")
-                            )
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'timesheet-template.csv';
+                a.click();
+                window.URL.revokeObjectURL(url);
+            };
+
+            const handleCSVImport = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const text = e.target.result;
+                        const lines = text.split('\\n').filter(line => line.trim());
+                        const dataLines = lines.slice(1);
+
+                        const importedProjects = dataLines.map((line, index) => {
+                            const values = line.split(',').map(v => v.trim());
+                            if (values.length < 4) {
+                                throw new Error("Line " + (index + 2) + ": Expected 4 columns, got " + values.length);
+                            }
+
+                            const [clientName, projectName, taskCode, subtaskCode] = values;
+                            return {
+                                id: Date.now() + Math.random() + index,
+                                clientName,
+                                projectName,
+                                taskCode: taskCode.toUpperCase(),
+                                subtaskCode: subtaskCode.toUpperCase(),
+                                code: taskCode.toUpperCase() + '-' + subtaskCode.toUpperCase()
+                            };
+                        });
+
+                        setProjectCodes(prev => [...prev, ...importedProjects]);
+                        setStorageError("Successfully imported " + importedProjects.length + " project(s)");
+
+                        event.target.value = '';
+                    } catch (error) {
+                        setStorageError("Import failed: " + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            const toggleClient = (clientName) => {
+                setExpandedClients(prev => ({
+                    ...prev,
+                    [clientName]: !prev[clientName]
+                }));
+            };
+
+            const toggleProject = (clientName, projectName) => {
+                const key = clientName + "::" + projectName;
+                setExpandedProjects(prev => ({
+                    ...prev,
+                    [key]: !prev[key]
+                }));
+            };
+
+            const toggleTask = (clientName, projectName, taskCode) => {
+                const key = clientName + "::" + projectName + "::" + taskCode;
+                setExpandedTasks(prev => ({
+                    ...prev,
+                    [key]: !prev[key]
+                }));
+            };
+
+            const organizeProjectsByHierarchy = () => {
+                const searchLower = projectSearchTerm.toLowerCase();
+                const filtered = projectCodes.filter(p =>
+                    !projectSearchTerm ||
+                    p.clientName.toLowerCase().includes(searchLower) ||
+                    p.projectName.toLowerCase().includes(searchLower) ||
+                    p.code.toLowerCase().includes(searchLower)
+                );
+
+                const hierarchy = {};
+                filtered.forEach(project => {
+                    if (!hierarchy[project.clientName]) {
+                        hierarchy[project.clientName] = {};
+                    }
+                    if (!hierarchy[project.clientName][project.projectName]) {
+                        hierarchy[project.clientName][project.projectName] = {};
+                    }
+                    if (!hierarchy[project.clientName][project.projectName][project.taskCode]) {
+                        hierarchy[project.clientName][project.projectName][project.taskCode] = [];
+                    }
+                    hierarchy[project.clientName][project.projectName][project.taskCode].push(project);
+                });
+
+                return hierarchy;
+            };
+
+            const exportToCSV = () => {
+                if (timeEntries.length === 0) {
+                    setStorageError('No entries to export');
+                    return;
+                }
+
+                const filteredEntries = timeEntries.filter(entry => {
+                    let matches = true;
+                    if (filterStartDate && entry.date < filterStartDate) matches = false;
+                    if (filterEndDate && entry.date > filterEndDate) matches = false;
+                    if (filterClient && entry.clientName !== filterClient) matches = false;
+                    if (filterProject && entry.projectName !== filterProject) matches = false;
+                    return matches;
+                });
+
+                if (filteredEntries.length === 0) {
+                    setStorageError('No entries match the filters');
+                    return;
+                }
+
+                const dateRange = filterStartDate && filterEndDate
+                    ? filterStartDate + " to " + filterEndDate
+                    : 'All Dates';
+
+                const projectSummary = {};
+                filteredEntries.forEach(entry => {
+                    const key = entry.projectCode;
+                    if (!projectSummary[key]) {
+                        projectSummary[key] = {
+                            code: entry.projectCode,
+                            client: entry.clientName,
+                            project: entry.projectName,
+                            totalHours: 0
+                        };
+                    }
+                    projectSummary[key].totalHours += entry.hours;
+                });
+
+                const summaryHeaders = ['Project Code', 'Client', 'Project', 'Total Hours'];
+                const summaryRows = Object.values(projectSummary).map(proj => [
+                    proj.code,
+                    proj.client,
+                    proj.project,
+                    proj.totalHours.toFixed(2)
+                ]);
+
+                const detailHeaders = ['Date', 'Project Code', 'Client', 'Project', 'Task', 'Subtask', 'Start', 'End', 'Hours', 'Comment'];
+                const detailRows = filteredEntries.map(entry => [
+                    entry.date,
+                    entry.projectCode,
+                    entry.clientName,
+                    entry.projectName,
+                    entry.taskCode,
+                    entry.subtaskCode,
+                    entry.startTime,
+                    entry.endTime,
+                    entry.hours.toFixed(2),
+                    entry.comment || ''
+                ]);
+
+                const csvContent = [
+                    "Timesheet Export - " + dateRange,
+                    filterClient ? "Client: " + filterClient : '',
+                    filterProject ? "Project: " + filterProject : '',
+                    '',
+                    'PROJECT SUMMARY',
+                    summaryHeaders.join(','),
+                    ...summaryRows.map(row => row.join(',')),
+                    '',
+                    "Total Hours: " + filteredEntries.reduce((sum, e) => sum + e.hours, 0).toFixed(2),
+                    '',
+                    'DETAILED ENTRIES',
+                    detailHeaders.join(','),
+                    ...detailRows.map(row => row.join(','))
+                ].join('\\n');
+
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "timesheet-" + (filterStartDate || 'all') + "-" + (filterEndDate || 'dates') + ".csv";
+                a.click();
+                window.URL.revokeObjectURL(url);
+            };
+
+            const exportToQBO = () => {
+                const filteredEntries = timeEntries.filter(entry => {
+                    let matches = true;
+                    if (filterStartDate && entry.date < filterStartDate) matches = false;
+                    if (filterEndDate && entry.date > filterEndDate) matches = false;
+                    return matches;
+                });
+
+                const qboHeaders = ['Date', 'Service Item', 'Description', 'Qty', 'Rate', 'Customer:Job'];
+                const qboRows = filteredEntries.map(entry => [
+                    entry.date,
+                    'Consulting Services',
+                    entry.projectCode + ' - ' + entry.projectName,
+                    entry.hours.toFixed(2),
+                    '',
+                    entry.clientName
+                ]);
+
+                const csvContent = [
+                    qboHeaders.join(','),
+                    ...qboRows.map(row => row.join(','))
+                ].join('\\n');
+
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "qbo-timesheet-" + (filterStartDate || new Date().toISOString().split('T')[0]) + ".csv";
+                a.click();
+                window.URL.revokeObjectURL(url);
+            };
+
+            const getUniqueClients = () => {
+                const clients = new Set(timeEntries.map(e => e.clientName));
+                return Array.from(clients).sort();
+            };
+
+            const getUniqueProjects = () => {
+                const projects = new Set(timeEntries.map(e => e.projectName));
+                return Array.from(projects).sort();
+            };
+
+            if (showSetup) {
+                return React.createElement('div', { className: "max-w-7xl mx-auto px-8 py-8 min-h-screen" },
+                    isTracking && currentSession && React.createElement('div', { className: "sticky top-0 z-50 mb-6 p-3 bg-white border-2 border-deep-green rounded-subtle shadow-md flex items-center justify-between gap-4" },
+                        React.createElement('div', { className: "flex items-center gap-3" },
+                            React.createElement('div', { className: "w-2 h-2 bg-deep-green rounded-full animate-pulse" }),
+                            React.createElement('div', { className: "text-xl font-mono font-semibold text-deep-green tabular-nums" }, formatTime(elapsedTime))
                         ),
-                        React.createElement('p', { className: "text-xs text-green-600 mt-2" }, "💡 These work even when the app is minimized to the system tray!")
-                    ),
-                    React.createElement('div', { className: "bg-blue-50 rounded-lg p-6 mb-6" },
-                        React.createElement('h2', { className: "text-xl font-semibold mb-4" }, "Add New Project Code"),
-                        React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-4 mb-4" },
-                            React.createElement('div', null,
-                                React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-2" }, "Project Code"),
-                                React.createElement('input', {
-                                    type: "text",
-                                    value: newProjectCode,
-                                    onChange: (e) => setNewProjectCode(e.target.value.toUpperCase()),
-                                    placeholder: "e.g., ACME-001, CONSULT-ABC",
-                                    className: "w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                })
-                            ),
-                            React.createElement('div', null,
-                                React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-2" }, "Description"),
-                                React.createElement('input', {
-                                    type: "text",
-                                    value: newProjectDescription,
-                                    onChange: (e) => setNewProjectDescription(e.target.value),
-                                    placeholder: "e.g., Strategic Planning, Software Development",
-                                    className: "w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                })
-                            )
+                        React.createElement('div', { className: "flex-1 text-sm text-gray-700 truncate" },
+                            React.createElement('span', { className: "font-semibold text-deep-green" }, currentSession.projectCode)
                         ),
-                        React.createElement('div', { className: "flex gap-3" },
-                            React.createElement('button', {
-                                onClick: addProjectCode,
-                                className: "flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                        React.createElement('div', { className: "flex items-center gap-2" },
+                            React.createElement('select', {
+                                value: "",
+                                onChange: (e) => {
+                                    if (e.target.value) {
+                                        const projectId = parseInt(e.target.value);
+                                        switchProject(projectId);
+                                        e.target.value = "";
+                                    }
+                                },
+                                className: "px-3 py-1.5 text-xs border border-soft-gray rounded-subtle bg-white text-gray-700 hover:border-deep-green focus:outline-none focus:border-deep-green transition-colors cursor-pointer"
                             },
-                                React.createElement(Plus),
-                                "Add Project Code"
+                                React.createElement('option', { value: "" }, "Switch to..."),
+                                projectCodes.filter(p => p.id !== currentSession.projectId).map(project => {
+                                    return React.createElement('option', { key: project.id, value: project.id }, project.code);
+                                })
                             ),
                             React.createElement('button', {
-                                onClick: addDemoData,
-                                className: "px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-                            }, "Add Demo Data")
+                                onClick: stopTracking,
+                                className: "flex items-center gap-1.5 px-3 py-1.5 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium text-xs"
+                            },
+                                React.createElement(Square, { size: 14 }),
+                                "Stop"
+                            )
                         )
                     ),
-                    projectCodes.length > 0 && React.createElement('div', { className: "mb-6" },
-                        React.createElement('h3', { className: "text-lg font-semibold mb-3" }, "Your Project Codes"),
-                        React.createElement('div', { className: "space-y-2" },
-                            projectCodes.map((project) =>
-                                React.createElement('div', { key: project.id, className: "flex items-center justify-between p-3 bg-gray-50 rounded-md" },
-                                    React.createElement('div', null,
-                                        React.createElement('span', { className: "font-semibold text-blue-600" }, project.code),
-                                        React.createElement('span', { className: "text-gray-600 ml-3" }, project.description)
+                    React.createElement('div', { className: "flex justify-between items-center mb-10 pb-6 border-b border-soft-gray" },
+                        React.createElement('div', { className: "bg-off-white rounded px-2 py-1" },
+                            React.createElement('img', {
+                                src: "logo.png",
+                                alt: "Timesheet Logo",
+                                className: "h-16"
+                            })
+                        ),
+                        React.createElement('div', { className: "inline-flex bg-soft-gray rounded-full p-1" },
+                                React.createElement('button', {
+                                    onClick: () => setShowSetup(false),
+                                    className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (!showSetup ? "bg-deep-green text-white" : "text-gray-600 hover:text-gray-800")
+                                },
+                                    React.createElement(Clock),
+                                    "Track Time"
+                                ),
+                            React.createElement('button', {
+                                onClick: () => setShowSetup(true),
+                                className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (showSetup ? "bg-eggplant text-white" : "text-gray-600 hover:text-gray-800")
+                            },
+                                React.createElement(Building),
+                                "Manage Projects"
+                            )
+                        )
+                    ),
+
+                    showSettingsMenu && React.createElement('div', {
+                        className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
+                        onClick: () => setShowSettingsMenu(false)
+                    },
+                        React.createElement('div', {
+                            className: "bg-white rounded-subtle p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto",
+                            onClick: (e) => e.stopPropagation()
+                        },
+                            React.createElement('div', { className: "flex justify-between items-center mb-6" },
+                                React.createElement('h2', { className: "text-2xl font-bold text-eggplant" }, "Settings"),
+                                React.createElement('button', {
+                                    onClick: () => setShowSettingsMenu(false),
+                                    className: "text-gray-400 hover:text-eggplant text-2xl"
+                                }, "×")
+                            ),
+
+                            React.createElement('div', { className: "space-y-6" },
+                                React.createElement('div', { className: "border-b border-soft-gray pb-6" },
+                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant mb-3" }, "Time Rounding"),
+                                    React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Automatically round time entries for cleaner billing"),
+                                    React.createElement('select', {
+                                        value: timeRounding,
+                                        onChange: (e) => setTimeRounding(e.target.value),
+                                        className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                                    },
+                                        React.createElement('option', { value: "none" }, "No rounding"),
+                                        React.createElement('option', { value: "5" }, "Round to nearest 5 minutes"),
+                                        React.createElement('option', { value: "10" }, "Round to nearest 10 minutes"),
+                                        React.createElement('option', { value: "15" }, "Round to nearest 15 minutes")
+                                    )
+                                ),
+
+                                React.createElement('div', { className: "border-b border-soft-gray pb-6" },
+                                    React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Auto-Pause Detection"),
+                                        React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                            React.createElement('input', {
+                                                type: "checkbox",
+                                                checked: autoPauseEnabled,
+                                                onChange: (e) => setAutoPauseEnabled(e.target.checked),
+                                                className: "sr-only peer"
+                                            }),
+                                            React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                        )
                                     ),
-                                    React.createElement('button', {
-                                        onClick: () => deleteProjectCode(project.id),
-                                        className: "text-red-600 hover:text-red-800"
-                                    }, React.createElement(Trash2))
+                                    React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Detect when computer is idle and prompt to stop timer"),
+                                    autoPauseEnabled && React.createElement('select', {
+                                        value: autoPauseMinutes,
+                                        onChange: (e) => setAutoPauseMinutes(parseInt(e.target.value)),
+                                        className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                                    },
+                                        React.createElement('option', { value: "5" }, "After 5 minutes idle"),
+                                        React.createElement('option', { value: "10" }, "After 10 minutes idle"),
+                                        React.createElement('option', { value: "15" }, "After 15 minutes idle"),
+                                        React.createElement('option', { value: "30" }, "After 30 minutes idle")
+                                    )
+                                ),
+
+                                React.createElement('div', { className: "border-b border-soft-gray pb-6" },
+                                    React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Compact Mode"),
+                                        React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                            React.createElement('input', {
+                                                type: "checkbox",
+                                                checked: compactMode,
+                                                onChange: (e) => setCompactMode(e.target.checked),
+                                                className: "sr-only peer"
+                                            }),
+                                            React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                        )
+                                    ),
+                                    React.createElement('p', { className: "text-sm text-gray-600" }, "Reduce spacing and use smaller UI elements")
+                                ),
+
+                                React.createElement('div', { className: "pb-6" },
+                                    React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Daily Goal"),
+                                        React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                            React.createElement('input', {
+                                                type: "checkbox",
+                                                checked: dailyGoalEnabled,
+                                                onChange: (e) => setDailyGoalEnabled(e.target.checked),
+                                                className: "sr-only peer"
+                                            }),
+                                            React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                        )
+                                    ),
+                                    React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Set a daily hours target and track your progress"),
+                                    dailyGoalEnabled && React.createElement('div', { className: "flex items-center gap-3" },
+                                        React.createElement('input', {
+                                            type: "number",
+                                            min: "1",
+                                            max: "24",
+                                            value: dailyGoalHours,
+                                            onChange: (e) => setDailyGoalHours(parseInt(e.target.value)),
+                                            className: "w-20 px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                                        }),
+                                        React.createElement('span', { className: "text-gray-700" }, "hours per day")
+                                    )
                                 )
                             )
                         )
                     ),
-                    projectCodes.length > 0 && React.createElement('div', { className: "text-center" },
+
+                    showGuideModal && React.createElement('div', {
+                        className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4",
+                        onClick: () => setShowGuideModal(false)
+                    },
+                        React.createElement('div', {
+                            className: "bg-white rounded-subtle p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto",
+                            onClick: (e) => e.stopPropagation()
+                        },
+                            React.createElement('div', { className: "flex justify-between items-center mb-6" },
+                                React.createElement('h2', { className: "text-3xl font-bold text-eggplant" }, "Getting Started with ThymeSheet"),
+                                React.createElement('button', {
+                                    onClick: () => setShowGuideModal(false),
+                                    className: "text-gray-400 hover:text-eggplant text-3xl leading-none"
+                                }, "×")
+                            ),
+
+                            React.createElement('div', { className: "space-y-8" },
+                                React.createElement('section', null,
+                                    React.createElement('h3', { className: "text-xl font-semibold text-deep-green mb-4 flex items-center gap-2" },
+                                        React.createElement('span', { className: "bg-deep-green text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" }, "1"),
+                                        "Setting Up Your Projects"
+                                    ),
+                                    React.createElement('div', { className: "ml-10 space-y-3 text-gray-700" },
+                                        React.createElement('p', { className: "leading-relaxed" }, "Before you can track time, you need to add your projects. ThymeSheet uses a 4-field structure for maximum organization:"),
+                                        React.createElement('ul', { className: "list-disc ml-6 space-y-2" },
+                                            React.createElement('li', null, React.createElement('strong', null, "Client Name:"), " The company or organization you're working for (e.g., \"Orbital\")"),
+                                            React.createElement('li', null, React.createElement('strong', null, "Project/Admin Name:"), " The specific project or administrative category (e.g., \"O2-X Habitat Offsetting Plan\")"),
+                                            React.createElement('li', null, React.createElement('strong', null, "Task Code:"), " The main task category (e.g., \"1. Meetings and Delivery\")"),
+                                            React.createElement('li', null, React.createElement('strong', null, "Subtask Code:"), " The specific subtask (e.g., \"1.1 Project\")")
+                                        ),
+                                        React.createElement('div', { className: "bg-pearl p-4 rounded-subtle mt-4" },
+                                            React.createElement('p', { className: "font-semibold text-eggplant mb-2" }, "💡 Quick Tip:"),
+                                            React.createElement('p', null, "Navigate to ", React.createElement('strong', null, "View → Manage Projects"), " or click the ", React.createElement('strong', null, "\"Manage Projects\""), " toggle to add projects one by one, or use ", React.createElement('strong', null, "\"Download Template\""), " to bulk import via CSV.")
+                                        )
+                                    )
+                                ),
+
+                                React.createElement('section', null,
+                                    React.createElement('h3', { className: "text-xl font-semibold text-deep-green mb-4 flex items-center gap-2" },
+                                        React.createElement('span', { className: "bg-deep-green text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" }, "2"),
+                                        "Tracking Your Time"
+                                    ),
+                                    React.createElement('div', { className: "ml-10 space-y-3 text-gray-700" },
+                                        React.createElement('p', { className: "leading-relaxed" }, "Once your projects are set up, tracking time is simple:"),
+                                        React.createElement('ol', { className: "list-decimal ml-6 space-y-2" },
+                                            React.createElement('li', null, "Navigate to ", React.createElement('strong', null, "View → Track Time"), " or click the ", React.createElement('strong', null, "\"Track Time\""), " toggle"),
+                                            React.createElement('li', null, "Select your project from the dropdown menu"),
+                                            React.createElement('li', null, "Optionally add a comment describing what you're working on"),
+                                            React.createElement('li', null, "Click ", React.createElement('strong', { className: "text-deep-green" }, "\"Start Timer\""), " to begin tracking"),
+                                            React.createElement('li', null, "When you're done, click ", React.createElement('strong', { className: "text-eggplant" }, "\"Stop Timer\""), " to save the entry")
+                                        ),
+                                        React.createElement('div', { className: "bg-pearl p-4 rounded-subtle mt-4" },
+                                            React.createElement('p', { className: "font-semibold text-eggplant mb-2" }, "⚡ Power Features:"),
+                                            React.createElement('ul', { className: "list-disc ml-6 space-y-1" },
+                                                React.createElement('li', null, React.createElement('strong', null, "Recent Projects:"), " Your last 5 projects appear at the top for quick access"),
+                                                React.createElement('li', null, React.createElement('strong', null, "Quick Switch:"), " Use the dropdown in the running timer bar to switch projects without stopping"),
+                                                React.createElement('li', null, React.createElement('strong', null, "Always Visible Timer:"), " The compact timer bar stays visible on both pages")
+                                            )
+                                        )
+                                    )
+                                ),
+
+                                React.createElement('section', null,
+                                    React.createElement('h3', { className: "text-xl font-semibold text-deep-green mb-4 flex items-center gap-2" },
+                                        React.createElement('span', { className: "bg-deep-green text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" }, "3"),
+                                        "Keyboard Shortcuts"
+                                    ),
+                                    React.createElement('div', { className: "ml-10 space-y-3 text-gray-700" },
+                                        React.createElement('p', { className: "leading-relaxed mb-3" }, "Work faster with these global hotkeys (work even when app is minimized):"),
+                                        React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+                                            React.createElement('div', { className: "flex items-center gap-3 bg-soft-gray p-3 rounded-subtle" },
+                                                React.createElement('kbd', { className: "px-3 py-2 bg-white border-2 border-gray-300 rounded font-mono text-sm" }, "Ctrl+Shift+Z"),
+                                                React.createElement('span', null, "Show/Hide window")
+                                            ),
+                                            React.createElement('div', { className: "flex items-center gap-3 bg-soft-gray p-3 rounded-subtle" },
+                                                React.createElement('kbd', { className: "px-3 py-2 bg-white border-2 border-gray-300 rounded font-mono text-sm" }, "Ctrl+Shift+Space"),
+                                                React.createElement('span', null, "Start/Stop timer")
+                                            ),
+                                            React.createElement('div', { className: "flex items-center gap-3 bg-soft-gray p-3 rounded-subtle" },
+                                                React.createElement('kbd', { className: "px-3 py-2 bg-white border-2 border-gray-300 rounded font-mono text-sm" }, "Ctrl+,"),
+                                                React.createElement('span', null, "Open Settings")
+                                            ),
+                                            React.createElement('div', { className: "flex items-center gap-3 bg-soft-gray p-3 rounded-subtle" },
+                                                React.createElement('kbd', { className: "px-3 py-2 bg-white border-2 border-gray-300 rounded font-mono text-sm" }, "Ctrl+H"),
+                                                React.createElement('span', null, "Hide to tray")
+                                            )
+                                        )
+                                    )
+                                ),
+
+                                React.createElement('section', null,
+                                    React.createElement('h3', { className: "text-xl font-semibold text-deep-green mb-4 flex items-center gap-2" },
+                                        React.createElement('span', { className: "bg-deep-green text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" }, "4"),
+                                        "Configuring Settings"
+                                    ),
+                                    React.createElement('div', { className: "ml-10 space-y-3 text-gray-700" },
+                                        React.createElement('p', { className: "leading-relaxed mb-3" }, "Access ", React.createElement('strong', null, "Settings → All Settings"), " from the menu to configure:"),
+                                        React.createElement('div', { className: "space-y-3" },
+                                            React.createElement('div', null,
+                                                React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "⏱️ Time Rounding"),
+                                                React.createElement('p', null, "Automatically round your time entries to 5, 10, or 15-minute intervals for cleaner billing. Perfect for hourly billing requirements.")
+                                            ),
+                                            React.createElement('div', null,
+                                                React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "⏸️ Auto-Pause Detection"),
+                                                React.createElement('p', null, "ThymeSheet monitors mouse, keyboard, and click activity. If you're idle for your chosen duration (5-30 minutes), it asks if you want to stop the timer. Prevents accidental over-billing.")
+                                            ),
+                                            React.createElement('div', null,
+                                                React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "🎯 Daily Goal"),
+                                                React.createElement('p', null, "Set a target number of hours per day. ThymeSheet shows a live progress bar with your current hours, percentage complete, and hours remaining. Motivating and informative!")
+                                            ),
+                                            React.createElement('div', null,
+                                                React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "📦 Compact Mode"),
+                                                React.createElement('p', null, "Reduces spacing and uses smaller UI elements for a denser interface. Great for smaller screens.")
+                                            )
+                                        )
+                                    )
+                                ),
+
+                                React.createElement('section', null,
+                                    React.createElement('h3', { className: "text-xl font-semibold text-deep-green mb-4 flex items-center gap-2" },
+                                        React.createElement('span', { className: "bg-deep-green text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" }, "5"),
+                                        "Exporting Your Data"
+                                    ),
+                                    React.createElement('div', { className: "ml-10 space-y-3 text-gray-700" },
+                                        React.createElement('p', { className: "leading-relaxed" }, "ThymeSheet provides flexible export options for your timesheet data:"),
+                                        React.createElement('div', { className: "space-y-3" },
+                                            React.createElement('div', null,
+                                                React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "📊 CSV Export"),
+                                                React.createElement('p', null, "Exports a detailed CSV with both a project summary and detailed entries. Filter by date range, client, or project before exporting.")
+                                            ),
+                                            React.createElement('div', null,
+                                                React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "💼 QuickBooks Online (QBO) Export"),
+                                                React.createElement('p', null, "Exports in QBO-compatible format for easy import into QuickBooks. Includes service items, quantities, and customer mapping.")
+                                            )
+                                        ),
+                                        React.createElement('div', { className: "bg-deep-green bg-opacity-10 border-l-4 border-deep-green p-4 rounded-subtle mt-4" },
+                                            React.createElement('p', { className: "font-semibold text-deep-green mb-2" }, "📝 Pro Tip:"),
+                                            React.createElement('p', null, "Use the date range filters to export specific billing periods. Comments are included in CSV exports, so add context to your time entries!")
+                                        )
+                                    )
+                                ),
+
+                                React.createElement('section', null,
+                                    React.createElement('h3', { className: "text-xl font-semibold text-deep-green mb-4 flex items-center gap-2" },
+                                        React.createElement('span', { className: "bg-deep-green text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" }, "6"),
+                                        "System Tray Integration"
+                                    ),
+                                    React.createElement('div', { className: "ml-10 space-y-3 text-gray-700" },
+                                        React.createElement('p', { className: "leading-relaxed" }, "ThymeSheet lives in your system tray for always-available access:"),
+                                        React.createElement('ul', { className: "list-disc ml-6 space-y-2" },
+                                            React.createElement('li', null, React.createElement('strong', null, "Double-click the tray icon"), " to show/hide the window"),
+                                            React.createElement('li', null, React.createElement('strong', null, "Right-click the tray icon"), " for quick actions:"),
+                                            React.createElement('ul', { className: "list-circle ml-6 mt-1" },
+                                                React.createElement('li', null, "Show ThymeSheet"),
+                                                React.createElement('li', null, "Start/Stop Timer"),
+                                                React.createElement('li', null, "Quit")
+                                            ),
+                                            React.createElement('li', null, "The app stays running in the tray even when you close the window, so you can quickly pop it back up with ", React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray rounded text-sm" }, "Ctrl+Shift+Z"))
+                                        )
+                                    )
+                                ),
+
+                                React.createElement('section', { className: "border-t border-soft-gray pt-6" },
+                                    React.createElement('h3', { className: "text-xl font-semibold text-eggplant mb-4" }, "💡 Best Practices"),
+                                    React.createElement('div', { className: "space-y-2 text-gray-700" },
+                                        React.createElement('ul', { className: "list-disc ml-6 space-y-2" },
+                                            React.createElement('li', null, React.createElement('strong', null, "Set up all your projects at the start"), " to avoid interruptions during actual work"),
+                                            React.createElement('li', null, React.createElement('strong', null, "Use descriptive comments"), " - your future self will thank you when reviewing entries"),
+                                            React.createElement('li', null, React.createElement('strong', null, "Enable auto-pause"), " to prevent accidentally leaving the timer running"),
+                                            React.createElement('li', null, React.createElement('strong', null, "Set a daily goal"), " to stay motivated and aware of your workload"),
+                                            React.createElement('li', null, React.createElement('strong', null, "Export regularly"), " - weekly or bi-weekly exports make billing and invoicing smoother"),
+                                            React.createElement('li', null, React.createElement('strong', null, "Use the Recent Projects"), " feature for recurring work - it saves valuable clicks!")
+                                        )
+                                    )
+                                )
+                            ),
+
+                            React.createElement('div', { className: "mt-8 text-center" },
+                                React.createElement('button', {
+                                    onClick: () => setShowGuideModal(false),
+                                    className: "px-8 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-semibold"
+                                }, "Got It!")
+                            )
+                        )
+                    ),
+
+                    storageError && React.createElement('div', { className: "mb-8 p-5 bg-white border-l-4 border-eggplant rounded-subtle shadow-sm" },
+                        React.createElement('span', { className: "text-eggplant" }, storageError),
+                        React.createElement('button', {
+                            onClick: () => setStorageError(null),
+                            className: "ml-3 text-eggplant hover:opacity-60 transition-opacity"
+                        }, "×")
+                    ),
+
+                    React.createElement('div', { className: "bg-white border-l-4 border-deep-green rounded-subtle p-8 mb-8 shadow-sm" },
+                        React.createElement('h2', { className: "text-sm font-semibold text-eggplant mb-6 uppercase tracking-wider" }, "Keyboard Shortcuts"),
+                        React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-6" },
+                            React.createElement('div', { className: "flex items-center gap-3" },
+                                React.createElement('kbd', { className: "px-3 py-2 bg-soft-gray border border-gray-300 rounded-subtle text-eggplant text-xs font-medium" }, "Ctrl+Shift+Z"),
+                                React.createElement('span', { className: "text-gray-600" }, "Show/Hide window")
+                            ),
+                            React.createElement('div', { className: "flex items-center gap-3" },
+                                React.createElement('kbd', { className: "px-3 py-2 bg-soft-gray border border-gray-300 rounded-subtle text-eggplant text-xs font-medium" }, "Ctrl+Shift+Space"),
+                                React.createElement('span', { className: "text-gray-600" }, "Start/Stop timer")
+                            )
+                        )
+                    ),
+                    React.createElement('div', { className: "bg-white border-l-4 border-eggplant rounded-subtle p-10 mb-8 shadow-sm" },
+                        React.createElement('h2', { className: "text-xl font-semibold text-eggplant mb-8" }, "Add a project and start tracking"),
+                        React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" },
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-3" }, "Client Name"),
+                                React.createElement('input', {
+                                    type: "text",
+                                    value: newClientName,
+                                    onChange: (e) => setNewClientName(e.target.value),
+                                    placeholder: "Orbital",
+                                    className: "w-full px-4 py-3 border-b-2 border-soft-gray focus:outline-none focus:border-eggplant bg-transparent text-gray-800 transition-colors"
+                                })
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-3" }, "Project/Admin Name"),
+                                React.createElement('input', {
+                                    type: "text",
+                                    value: newProjectName,
+                                    onChange: (e) => setNewProjectName(e.target.value),
+                                    placeholder: "O2-X Habitat Offsetting Plan",
+                                    className: "w-full px-4 py-3 border-b-2 border-soft-gray focus:outline-none focus:border-eggplant bg-transparent text-gray-800 transition-colors"
+                                })
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-3" }, "Task Code"),
+                                React.createElement('input', {
+                                    type: "text",
+                                    value: newTaskCode,
+                                    onChange: (e) => setNewTaskCode(e.target.value.toUpperCase()),
+                                    placeholder: "1. Meetings and Delivery",
+                                    className: "w-full px-4 py-3 border-b-2 border-soft-gray focus:outline-none focus:border-eggplant bg-transparent text-gray-800 transition-colors"
+                                })
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-3" }, "Subtask Code"),
+                                React.createElement('input', {
+                                    type: "text",
+                                    value: newSubtaskCode,
+                                    onChange: (e) => setNewSubtaskCode(e.target.value.toUpperCase()),
+                                    placeholder: "1.1 Project",
+                                    className: "w-full px-4 py-3 border-b-2 border-soft-gray focus:outline-none focus:border-eggplant bg-transparent text-gray-800 transition-colors"
+                                })
+                            )
+                        ),
+                        React.createElement('div', { className: "flex gap-4" },
+                            React.createElement('button', {
+                                onClick: addProjectCode,
+                                className: "flex items-center gap-2 px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium"
+                            },
+                                React.createElement(Plus),
+                                "Add Project"
+                            ),
+                            React.createElement('button', {
+                                onClick: addDemoData,
+                                className: "px-6 py-3 border-2 border-eggplant text-eggplant rounded-subtle hover:bg-eggplant hover:text-white transition-all font-medium"
+                            }, "Load Demo Data")
+                        )
+                    ),
+                    React.createElement('div', { className: "flex items-center gap-4 mb-8" },
+                        React.createElement('div', { className: "flex-1 h-px bg-soft-gray" }),
+                        React.createElement('span', { className: "text-gray-500 text-sm uppercase tracking-wider" }, "or"),
+                        React.createElement('div', { className: "flex-1 h-px bg-soft-gray" })
+                    ),
+                    React.createElement('div', { className: "bg-white border-l-4 border-deep-green rounded-subtle p-8 mb-8 shadow-sm" },
+                        React.createElement('div', { className: "flex items-center gap-3 mb-6" },
+                            React.createElement(Upload),
+                            React.createElement('h3', { className: "text-xl font-semibold text-eggplant" }, "Bulk Import Projects from Spreadsheet")
+                        ),
+                        React.createElement('p', { className: "text-gray-700 mb-6 leading-relaxed" }, "Save time by importing multiple projects at once. Upload a CSV file with your project data."),
+
+                        React.createElement('div', { className: "bg-soft-gray p-6 rounded-subtle mb-6" },
+                            React.createElement('h4', { className: "font-semibold text-eggplant mb-3" }, "Required Format"),
+                            React.createElement('p', { className: "text-sm text-gray-600 mb-4" }, "Your CSV file must have exactly 4 columns in this order:"),
+                            React.createElement('div', { className: "overflow-x-auto" },
+                                React.createElement('table', { className: "w-full text-sm border-collapse" },
+                                    React.createElement('thead', null,
+                                        React.createElement('tr', { className: "bg-eggplant text-white" },
+                                            React.createElement('th', { className: "px-4 py-2 text-left border border-gray-300" }, "Client Name"),
+                                            React.createElement('th', { className: "px-4 py-2 text-left border border-gray-300" }, "Project/Admin Name"),
+                                            React.createElement('th', { className: "px-4 py-2 text-left border border-gray-300" }, "Task Code"),
+                                            React.createElement('th', { className: "px-4 py-2 text-left border border-gray-300" }, "Subtask Code")
+                                        )
+                                    ),
+                                    React.createElement('tbody', null,
+                                        React.createElement('tr', { className: "bg-white" },
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "Orbital"),
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "O2-X Habitat Offsetting Plan"),
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "1. Meetings and Delivery"),
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "1.1 Project")
+                                        ),
+                                        React.createElement('tr', { className: "bg-pearl" },
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "Orbital"),
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "O2-X Habitat Offsetting Plan"),
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "1. Meetings and Delivery"),
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "1.2 Internal")
+                                        ),
+                                        React.createElement('tr', { className: "bg-white" },
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "Orbital"),
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "O2-X Habitat Offsetting Plan"),
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "1. Meetings and Delivery"),
+                                            React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, "1.3 Regulatory")
+                                        )
+                                    )
+                                )
+                            )
+                        ),
+
+                        React.createElement('div', { className: "flex items-center gap-4" },
+                            React.createElement('input', {
+                                type: 'file',
+                                accept: '.csv,.txt',
+                                onChange: handleCSVImport,
+                                id: 'csv-upload',
+                                className: 'hidden'
+                            }),
+                            React.createElement('label', {
+                                htmlFor: 'csv-upload',
+                                className: 'flex items-center gap-2 px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium cursor-pointer'
+                            },
+                                React.createElement(Upload),
+                                "Upload CSV File"
+                            ),
+                            React.createElement('button', {
+                                onClick: downloadCSVTemplate,
+                                className: 'flex items-center gap-2 px-6 py-3 border-2 border-deep-green text-deep-green rounded-subtle hover:bg-deep-green hover:text-white transition-all font-medium'
+                            },
+                                React.createElement(Download),
+                                "Download Template"
+                            )
+                        )
+                    ),
+                    projectCodes.length > 0 && React.createElement('div', { className: "mb-8" },
+                        React.createElement('h2', { className: "text-xl font-semibold text-eggplant mb-6" }, "Your Projects"),
+                        React.createElement('div', { className: "mb-5" },
+                            React.createElement('div', { className: "relative" },
+                                React.createElement('input', {
+                                    type: 'text',
+                                    value: projectSearchTerm,
+                                    onChange: (e) => setProjectSearchTerm(e.target.value),
+                                    placeholder: 'Search by client, project, or code...',
+                                    className: 'w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800 transition-colors'
+                                }),
+                                projectSearchTerm && React.createElement('button', {
+                                    onClick: () => setProjectSearchTerm(''),
+                                    className: 'absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-eggplant text-xl'
+                                }, '×')
+                            )
+                        ),
+                        React.createElement('div', { className: "space-y-3" },
+                            Object.entries(organizeProjectsByHierarchy()).map(([clientName, clientProjects]) =>
+                                React.createElement('div', { key: clientName, className: "bg-white border border-soft-gray rounded-subtle overflow-hidden" },
+                                    React.createElement('button', {
+                                        onClick: () => toggleClient(clientName),
+                                        className: "w-full flex items-center justify-between p-4 bg-pearl hover:bg-opacity-70 transition-colors text-left"
+                                    },
+                                        React.createElement('div', { className: "flex items-center gap-2" },
+                                            React.createElement(Building),
+                                            React.createElement('span', { className: "font-semibold text-eggplant" }, clientName)
+                                        ),
+                                        React.createElement('div', { className: "flex items-center gap-3" },
+                                            React.createElement('span', { className: "text-sm text-gray-600" },
+                                                Object.keys(clientProjects).length + " project" + (Object.keys(clientProjects).length !== 1 ? 's' : '')
+                                            ),
+                                            React.createElement('span', { className: "text-sm text-eggplant" },
+                                                expandedClients[clientName] ? '▼' : '▶'
+                                            )
+                                        )
+                                    ),
+                                    expandedClients[clientName] && React.createElement('div', { className: "p-2 bg-white space-y-2" },
+                                        Object.entries(clientProjects).map(([projectName, projectTasks]) =>
+                                            React.createElement('div', { key: clientName + "-" + projectName, className: "border border-soft-gray rounded-subtle overflow-hidden" },
+                                                React.createElement('button', {
+                                                    onClick: () => toggleProject(clientName, projectName),
+                                                    className: "w-full flex items-center justify-between p-3 bg-off-white hover:bg-soft-gray transition-colors text-left"
+                                                },
+                                                    React.createElement('div', { className: "flex items-center gap-2" },
+                                                        React.createElement(Folder),
+                                                        React.createElement('span', { className: "font-medium text-deep-green" }, projectName)
+                                                    ),
+                                                    React.createElement('div', { className: "flex items-center gap-2" },
+                                                        React.createElement('span', { className: "text-sm text-gray-600" },
+                                                            Object.keys(projectTasks).length + " task" + (Object.keys(projectTasks).length !== 1 ? 's' : '')
+                                                        ),
+                                                        React.createElement('span', { className: "text-sm text-deep-green" },
+                                                            expandedProjects[clientName + "::" + projectName] ? '▼' : '▶'
+                                                        )
+                                                    )
+                                                ),
+                                                expandedProjects[clientName + "::" + projectName] && React.createElement('div', { className: "p-2 bg-white space-y-2" },
+                                                    Object.entries(projectTasks).map(([taskCode, subtasks]) =>
+                                                        React.createElement('div', { key: clientName + "-" + projectName + "-" + taskCode, className: "border border-soft-gray rounded-subtle overflow-hidden" },
+                                                            React.createElement('button', {
+                                                                onClick: () => toggleTask(clientName, projectName, taskCode),
+                                                                className: "w-full flex items-center justify-between p-3 bg-pearl hover:bg-opacity-70 transition-colors text-left"
+                                                            },
+                                                                React.createElement('div', { className: "flex items-center gap-2" },
+                                                                    React.createElement(Tag),
+                                                                    React.createElement('span', { className: "font-medium text-eggplant" }, 'Task: ' + taskCode)
+                                                                ),
+                                                                React.createElement('div', { className: "flex items-center gap-2" },
+                                                                    React.createElement('span', { className: "text-sm text-gray-600" },
+                                                                        subtasks.length + " subtask" + (subtasks.length !== 1 ? 's' : '')
+                                                                    ),
+                                                                    React.createElement('span', { className: "text-sm text-eggplant" },
+                                                                        expandedTasks[clientName + "::" + projectName + "::" + taskCode] ? '▼' : '▶'
+                                                                    )
+                                                                )
+                                                            ),
+                                                            expandedTasks[clientName + "::" + projectName + "::" + taskCode] && React.createElement('div', { className: "space-y-1 p-2 bg-white" },
+                                                                subtasks.map((project) =>
+                                                                    React.createElement('div', {
+                                                                        key: project.id,
+                                                                        className: 'flex items-center justify-between p-3 bg-off-white border-l-4 border-transparent rounded-subtle'
+                                                                    },
+                                                                        React.createElement('div', { className: "flex-1" },
+                                                                            React.createElement('div', { className: "flex items-center gap-2" },
+                                                                                React.createElement(Bookmark),
+                                                                                React.createElement('span', { className: "font-semibold text-deep-green" }, project.subtaskCode),
+                                                                                React.createElement('span', { className: "text-xs px-2 py-0.5 bg-soft-gray text-gray-600 rounded" }, project.code)
+                                                                            )
+                                                                        ),
+                                                                        React.createElement('button', {
+                                                                            onClick: () => deleteProjectCode(project.id),
+                                                                            className: "text-gray-400 hover:text-eggplant transition-colors ml-3"
+                                                                        }, React.createElement(Trash2))
+                                                                    )
+                                                                )
+                                                            )
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    ),
+                    projectCodes.length > 0 && React.createElement('div', { className: "text-center pt-6" },
                         React.createElement('button', {
                             onClick: () => setShowSetup(false),
-                            className: "px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 text-lg font-semibold"
-                        }, "Start Time Tracking")
+                            className: "px-10 py-4 bg-deep-green text-white text-base font-semibold rounded-subtle hover:bg-opacity-90 transition-all shadow-md"
+                        }, "Start Tracking")
                     )
                 );
             }
 
-            return React.createElement('div', { className: "max-w-6xl mx-auto p-6 bg-white min-h-screen" },
-                storageError && React.createElement('div', { className: "mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded" },
-                    storageError,
-                    React.createElement('button', {
-                        onClick: () => setStorageError(null),
-                        className: "ml-2 text-yellow-800 hover:text-yellow-900"
-                    }, "×")
-                ),
-                React.createElement('div', { className: "flex justify-between items-center mb-8" },
-                    React.createElement('div', null,
-                        React.createElement('h1', { className: "text-3xl font-bold text-gray-900 mb-2 flex items-center gap-2" },
-                            React.createElement(Clock),
-                            "Time Tracker"
-                        ),
-                        React.createElement('p', { className: "text-gray-600" }, "Select project and track time consistently")
+            return React.createElement('div', { className: "max-w-7xl mx-auto px-8 py-8 min-h-screen" },
+                isTracking && currentSession && React.createElement('div', { className: "sticky top-0 z-50 mb-6 p-3 bg-white border-2 border-deep-green rounded-subtle shadow-md flex items-center justify-between gap-4" },
+                    React.createElement('div', { className: "flex items-center gap-3" },
+                        React.createElement('div', { className: "w-2 h-2 bg-deep-green rounded-full animate-pulse" }),
+                        React.createElement('div', { className: "text-xl font-mono font-semibold text-deep-green tabular-nums" }, formatTime(elapsedTime))
                     ),
-                    React.createElement('button', {
-                        onClick: () => setShowSetup(true),
-                        className: "flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                    },
-                        React.createElement(Settings),
-                        "Manage Projects"
+                    React.createElement('div', { className: "flex-1 text-sm text-gray-700 truncate" },
+                        React.createElement('span', { className: "font-semibold text-deep-green" }, currentSession.projectCode)
+                    ),
+                    React.createElement('div', { className: "flex items-center gap-2" },
+                        React.createElement('select', {
+                            value: "",
+                            onChange: (e) => {
+                                if (e.target.value) {
+                                    const projectId = parseInt(e.target.value);
+                                    switchProject(projectId);
+                                    e.target.value = "";
+                                }
+                            },
+                            className: "px-3 py-1.5 text-xs border border-soft-gray rounded-subtle bg-white text-gray-700 hover:border-deep-green focus:outline-none focus:border-deep-green transition-colors cursor-pointer"
+                        },
+                            React.createElement('option', { value: "" }, "Switch to..."),
+                            projectCodes.filter(p => p.id !== currentSession.projectId).map(project => {
+                                return React.createElement('option', { key: project.id, value: project.id }, project.code);
+                            })
+                        ),
+                        React.createElement('button', {
+                            onClick: stopTracking,
+                            className: "flex items-center gap-1.5 px-3 py-1.5 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium text-xs"
+                        },
+                            React.createElement(Square, { size: 14 }),
+                            "Stop"
+                        )
+                    )
+                ),
+                React.createElement('div', { className: "flex justify-between items-center mb-10 pb-6 border-b border-soft-gray" },
+                    React.createElement('div', { className: "bg-off-white rounded px-2 py-1" },
+                        React.createElement('img', {
+                            src: "logo.png",
+                            alt: "Timesheet Logo",
+                            className: "h-16"
+                        })
+                    ),
+                    React.createElement('div', { className: "inline-flex bg-soft-gray rounded-full p-1" },
+                        React.createElement('button', {
+                            onClick: () => setShowSetup(false),
+                            className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (!showSetup ? "bg-deep-green text-white" : "text-gray-600 hover:text-gray-800")
+                        },
+                            React.createElement(Clock),
+                            "Track Time"
+                        ),
+                        React.createElement('button', {
+                            onClick: () => setShowSetup(true),
+                            className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (showSetup ? "bg-eggplant text-white" : "text-gray-600 hover:text-gray-800")
+                        },
+                            React.createElement(Building),
+                            "Manage Projects"
+                        )
                     )
                 ),
 
-                React.createElement('div', { className: "bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6" },
-                    React.createElement('h2', { className: "text-lg font-semibold text-blue-800 mb-2" }, "🚀 Quick Access Hotkeys"),
-                    React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-3 text-sm" },
-                        React.createElement('div', { className: "flex items-center gap-2" },
-                            React.createElement('kbd', { className: "px-2 py-1 bg-white border border-gray-300 rounded text-xs font-mono" }, "Ctrl+Shift+X"),
-                            React.createElement('span', { className: "text-gray-700" }, "Show/Hide this app")
-                        ),
-                        React.createElement('div', { className: "flex items-center gap-2" },
-                            React.createElement('kbd', { className: "px-2 py-1 bg-white border border-gray-300 rounded text-xs font-mono" }, "Ctrl+Shift+Space"),
-                            React.createElement('span', { className: "text-gray-700" }, "Start/Stop timer")
-                        )
-                    ),
-                    React.createElement('p', { className: "text-xs text-blue-600 mt-2" }, "💡 Use these hotkeys from anywhere on your computer!"),
-                    React.createElement('div', { className: "mt-3 pt-3 border-t border-blue-200" },
-                        React.createElement('p', { className: "text-sm text-gray-600" },
-                            React.createElement('span', { className: "font-semibold" }, "System Tray: "),
-                            "Look for the gray square icon in your taskbar. Right-click it for quick actions!"
-                        )
-                    )
-                ),
-                React.createElement('div', { className: "bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-6 border border-blue-200" },
-                    React.createElement('h2', { className: "text-lg font-semibold mb-4" }, "Quick Project Switch"),
-                    React.createElement('div', { className: "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" },
-                        projectCodes.map((project) =>
+                showSettingsMenu && React.createElement('div', {
+                    className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
+                    onClick: () => setShowSettingsMenu(false)
+                },
+                    React.createElement('div', {
+                        className: "bg-white rounded-subtle p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto",
+                        onClick: (e) => e.stopPropagation()
+                    },
+                        React.createElement('div', { className: "flex justify-between items-center mb-6" },
+                            React.createElement('h2', { className: "text-2xl font-bold text-eggplant" }, "Settings"),
                             React.createElement('button', {
-                                key: project.id,
-                                onClick: () => switchProject(project.id),
-                                className: `p-3 rounded-lg border-2 transition-all text-left ${
-                                    selectedProject === project.id.toString()
-                                        ? 'border-blue-500 bg-blue-100'
-                                        : 'border-gray-200 bg-white hover:border-blue-300'
-                                } ${isTracking && currentSession?.projectId === project.id ? 'ring-2 ring-green-400' : ''}`
-                            },
-                                React.createElement('div', { className: "font-semibold text-blue-600" }, project.code),
-                                React.createElement('div', { className: "text-sm text-gray-600 truncate" }, project.description),
-                                isTracking && currentSession?.projectId === project.id &&
-                                React.createElement('div', { className: "text-xs text-green-600 font-semibold mt-1" }, "● TRACKING")
+                                onClick: () => setShowSettingsMenu(false),
+                                className: "text-gray-400 hover:text-eggplant text-2xl"
+                            }, "×")
+                        ),
+
+                        React.createElement('div', { className: "space-y-6" },
+                            React.createElement('div', { className: "border-b border-soft-gray pb-6" },
+                                React.createElement('h3', { className: "text-lg font-semibold text-eggplant mb-3" }, "Time Rounding"),
+                                React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Automatically round time entries for cleaner billing"),
+                                React.createElement('select', {
+                                    value: timeRounding,
+                                    onChange: (e) => setTimeRounding(e.target.value),
+                                    className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                                },
+                                    React.createElement('option', { value: "none" }, "No rounding"),
+                                    React.createElement('option', { value: "5" }, "Round to nearest 5 minutes"),
+                                    React.createElement('option', { value: "10" }, "Round to nearest 10 minutes"),
+                                    React.createElement('option', { value: "15" }, "Round to nearest 15 minutes")
+                                )
+                            ),
+
+                            React.createElement('div', { className: "border-b border-soft-gray pb-6" },
+                                React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Auto-Pause Detection"),
+                                    React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                        React.createElement('input', {
+                                            type: "checkbox",
+                                            checked: autoPauseEnabled,
+                                            onChange: (e) => setAutoPauseEnabled(e.target.checked),
+                                            className: "sr-only peer"
+                                        }),
+                                        React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                    )
+                                ),
+                                React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Detect when computer is idle and prompt to stop timer"),
+                                autoPauseEnabled && React.createElement('select', {
+                                    value: autoPauseMinutes,
+                                    onChange: (e) => setAutoPauseMinutes(parseInt(e.target.value)),
+                                    className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                                },
+                                    React.createElement('option', { value: "5" }, "After 5 minutes idle"),
+                                    React.createElement('option', { value: "10" }, "After 10 minutes idle"),
+                                    React.createElement('option', { value: "15" }, "After 15 minutes idle"),
+                                    React.createElement('option', { value: "30" }, "After 30 minutes idle")
+                                )
+                            ),
+
+                            React.createElement('div', { className: "border-b border-soft-gray pb-6" },
+                                React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Compact Mode"),
+                                    React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                        React.createElement('input', {
+                                            type: "checkbox",
+                                            checked: compactMode,
+                                            onChange: (e) => setCompactMode(e.target.checked),
+                                            className: "sr-only peer"
+                                        }),
+                                        React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                    )
+                                ),
+                                React.createElement('p', { className: "text-sm text-gray-600" }, "Reduce spacing and use smaller UI elements")
+                            ),
+
+                            React.createElement('div', { className: "pb-6" },
+                                React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Daily Goal"),
+                                    React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                        React.createElement('input', {
+                                            type: "checkbox",
+                                            checked: dailyGoalEnabled,
+                                            onChange: (e) => setDailyGoalEnabled(e.target.checked),
+                                            className: "sr-only peer"
+                                        }),
+                                        React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                    )
+                                ),
+                                React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Set a daily hours target and track your progress"),
+                                dailyGoalEnabled && React.createElement('div', { className: "flex items-center gap-3" },
+                                    React.createElement('input', {
+                                        type: "number",
+                                        min: "1",
+                                        max: "24",
+                                        value: dailyGoalHours,
+                                        onChange: (e) => setDailyGoalHours(parseInt(e.target.value)),
+                                        className: "w-20 px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                                    }),
+                                    React.createElement('span', { className: "text-gray-700" }, "hours per day")
+                                )
                             )
                         )
                     )
                 ),
-                React.createElement('div', { className: "bg-white rounded-lg p-6 mb-6 border border-gray-200 shadow-sm" },
-                    React.createElement('div', { className: "flex items-center justify-between" },
-                        React.createElement('div', null,
-                            currentSession && React.createElement('div', { className: "mb-2" },
-                                React.createElement('span', { className: "text-sm text-gray-600" }, "Currently tracking:"),
-                                React.createElement('div', { className: "font-semibold text-lg" },
-                                    React.createElement('span', { className: "text-blue-600" }, currentSession.projectCode),
-                                    React.createElement('span', { className: "text-gray-600 ml-2" }, currentSession.projectDescription)
-                                )
-                            ),
-                            React.createElement('div', { className: "text-4xl font-mono font-bold text-gray-900" }, formatTime(elapsedTime))
+
+                storageError && React.createElement('div', { className: "mb-8 p-5 bg-white border-l-4 border-eggplant rounded-subtle shadow-sm" },
+                    React.createElement('span', { className: "text-eggplant" }, storageError),
+                    React.createElement('button', {
+                        onClick: () => setStorageError(null),
+                        className: "ml-3 text-eggplant hover:opacity-60 transition-opacity"
+                    }, "×")
+                ),
+
+                dailyGoalEnabled && (() => {
+                    const todaysHours = getTodaysTotalHours();
+                    const progressPercent = Math.min((todaysHours / dailyGoalHours) * 100, 100);
+                    const hoursRemaining = Math.max(0, dailyGoalHours - todaysHours);
+
+                    return React.createElement('div', { className: "bg-white border-l-4 border-eggplant rounded-subtle p-6 mb-10 shadow-sm" },
+                        React.createElement('div', { className: "flex justify-between items-center mb-3" },
+                            React.createElement('h3', { className: "text-sm font-semibold text-eggplant uppercase tracking-wider" }, "Daily Progress"),
+                            React.createElement('div', { className: "text-right" },
+                                React.createElement('span', { className: "text-2xl font-semibold text-deep-green" }, todaysHours.toFixed(1)),
+                                React.createElement('span', { className: "text-gray-600 text-sm" }, " / " + dailyGoalHours + "h")
+                            )
                         ),
-                        React.createElement('div', { className: "flex gap-3" },
-                            !isTracking ?
-                                React.createElement('button', {
-                                    onClick: startTracking,
-                                    disabled: !selectedProject,
-                                    className: "flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        React.createElement('div', { className: "w-full bg-soft-gray rounded-full h-4 overflow-hidden" },
+                            React.createElement('div', {
+                                className: "h-full bg-gradient-to-r from-deep-green to-eggplant transition-all duration-500",
+                                style: { width: progressPercent + "%" }
+                            })
+                        ),
+                        React.createElement('div', { className: "flex justify-between items-center mt-2 text-xs text-gray-600" },
+                            React.createElement('span', null, progressPercent.toFixed(0) + "% complete"),
+                            React.createElement('span', null, hoursRemaining.toFixed(1) + "h remaining")
+                        )
+                    );
+                })(),
+
+                recentProjects.length > 0 && React.createElement('div', { className: "bg-white border-l-4 border-deep-green rounded-subtle p-6 mb-8 shadow-sm" },
+                    React.createElement('h3', { className: "text-sm font-semibold text-eggplant uppercase tracking-wider mb-4" }, "Recent Projects"),
+                    React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3" },
+                        recentProjects.slice(0, 5).map(projectId => {
+                            const project = projectCodes.find(p => p.id === projectId);
+                            if (!project) return null;
+                            const isActive = isTracking && currentSession && currentSession.projectId === projectId;
+                            const isSelected = selectedProject === projectId.toString();
+
+                            return React.createElement('button', {
+                                key: projectId,
+                                onClick: () => {
+                                    if (isTracking && !isActive) {
+                                        switchProject(projectId);
+                                    } else {
+                                        setSelectedProject(projectId.toString());
+                                    }
                                 },
-                                    React.createElement(Play),
-                                    "Start"
-                                ) :
-                                React.createElement('button', {
-                                    onClick: stopTracking,
-                                    className: "flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                                className: "p-3 rounded-subtle border-2 transition-all text-left " +
+                                    (isActive ? "border-deep-green bg-deep-green bg-opacity-10" :
+                                     isSelected ? "border-eggplant bg-eggplant bg-opacity-10" :
+                                     "border-soft-gray bg-white hover:border-deep-green")
+                            },
+                                React.createElement('div', { className: "text-xs font-semibold text-deep-green truncate" }, project.code),
+                                React.createElement('div', { className: "text-xs text-gray-600 truncate" }, project.clientName),
+                                isActive && React.createElement('div', { className: "text-xs text-deep-green font-semibold mt-1" }, "● TRACKING")
+                            );
+                        })
+                    )
+                ),
+
+                React.createElement('div', { className: "bg-white border-l-4 border-eggplant rounded-subtle p-8 mb-8 shadow-sm" },
+                    React.createElement('h2', { className: "text-xl font-semibold text-eggplant mb-6" }, "Track Time"),
+                    React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-3 gap-6" },
+                        React.createElement('div', { className: "lg:col-span-2" },
+                            React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-3" }, "Select Project"),
+                            React.createElement('select', {
+                                value: selectedProject,
+                                onChange: (e) => {
+                                    const newProjectId = parseInt(e.target.value);
+                                    if (isTracking) {
+                                        switchProject(newProjectId);
+                                    } else {
+                                        setSelectedProject(e.target.value);
+                                    }
                                 },
-                                    React.createElement(Square),
-                                    "Stop"
-                                )
+                                className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800"
+                            },
+                                React.createElement('option', { value: "", disabled: true }, "Select a project..."),
+                                projectCodes.map(project => {
+                                    return React.createElement('option', { key: project.id, value: project.id }, project.code + " - " + project.clientName);
+                                })
+                            ),
+                            React.createElement('div', { className: "mt-4" },
+                                React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-3" }, "Comment (Optional)"),
+                                React.createElement('textarea', {
+                                    value: currentComment,
+                                    onChange: (e) => setCurrentComment(e.target.value),
+                                    placeholder: "Add notes about this time entry...",
+                                    className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800 resize-none",
+                                    rows: 3,
+                                    disabled: !isTracking
+                                })
+                            )
+                        ),
+                        React.createElement('div', { className: "flex flex-col justify-between" },
+                            React.createElement('div', null,
+                                React.createElement('div', { className: "text-sm text-gray-600 mb-2" }, "Elapsed Time"),
+                                React.createElement('div', { className: "text-4xl font-mono font-bold text-deep-green mb-4 tabular-nums" }, formatTime(elapsedTime))
+                            ),
+                            React.createElement('div', { className: "space-y-2" },
+                                !isTracking ?
+                                    React.createElement('button', {
+                                        onClick: startTracking,
+                                        disabled: !selectedProject,
+                                        className: "w-full px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                    }, "Start Timer") :
+                                    React.createElement('button', {
+                                        onClick: stopTracking,
+                                        className: "w-full px-6 py-3 bg-eggplant text-white rounded-subtle hover:bg-opacity-90 transition-all font-semibold"
+                                    }, "Stop Timer")
+                            )
                         )
                     )
                 ),
-                React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-4 gap-4 mb-6" },
-                    React.createElement('div', { className: "bg-white p-4 rounded-lg border border-gray-200 shadow-sm" },
-                        React.createElement('div', { className: "flex items-center gap-2 mb-2" },
-                            React.createElement(Calendar),
-                            React.createElement('h3', { className: "font-semibold text-gray-700" }, "This Month")
+
+                React.createElement('div', { className: "bg-white border-l-4 border-deep-green rounded-subtle p-6 mb-8 shadow-sm" },
+                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant mb-4" }, "Export Options"),
+                    React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-4 mb-4" },
+                        React.createElement('div', null,
+                            React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-2" }, "Start Date"),
+                            React.createElement('input', {
+                                type: "date",
+                                value: filterStartDate,
+                                onChange: (e) => setFilterStartDate(e.target.value),
+                                className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                            })
                         ),
-                        React.createElement('p', { className: "text-2xl font-bold text-gray-900" }, getTotalMonthlyHours().toFixed(1) + "h")
-                    ),
-                    React.createElement('div', { className: "bg-white p-4 rounded-lg border border-gray-200 shadow-sm" },
-                        React.createElement('div', { className: "flex items-center gap-2 mb-2" },
-                            React.createElement(BarChart3),
-                            React.createElement('h3', { className: "font-semibold text-gray-700" }, "Projects")
+                        React.createElement('div', null,
+                            React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-2" }, "End Date"),
+                            React.createElement('input', {
+                                type: "date",
+                                value: filterEndDate,
+                                onChange: (e) => setFilterEndDate(e.target.value),
+                                className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                            })
                         ),
-                        React.createElement('p', { className: "text-2xl font-bold text-gray-900" }, Object.keys(generateMonthlyTimesheet()).length)
+                        React.createElement('div', null,
+                            React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-2" }, "Filter by Client"),
+                            React.createElement('select', {
+                                value: filterClient,
+                                onChange: (e) => setFilterClient(e.target.value),
+                                className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                            },
+                                React.createElement('option', { value: "" }, "All Clients"),
+                                getUniqueClients().map(client =>
+                                    React.createElement('option', { key: client, value: client }, client)
+                                )
+                            )
+                        ),
+                        React.createElement('div', null,
+                            React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-2" }, "Filter by Project"),
+                            React.createElement('select', {
+                                value: filterProject,
+                                onChange: (e) => setFilterProject(e.target.value),
+                                className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                            },
+                                React.createElement('option', { value: "" }, "All Projects"),
+                                getUniqueProjects().map(project =>
+                                    React.createElement('option', { key: project, value: project }, project)
+                                )
+                            )
+                        )
                     ),
-                    React.createElement('div', { className: "md:col-span-2 flex gap-2" },
+                    React.createElement('div', { className: "flex gap-3" },
                         React.createElement('button', {
-                            onClick: exportToExcel,
-                            className: "flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors",
-                            disabled: timeEntries.length === 0
+                            onClick: exportToCSV,
+                            disabled: timeEntries.length === 0,
+                            className: "flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
                         },
                             React.createElement(Download),
-                            "Export Monthly Timesheet"
+                            "Export to CSV"
                         ),
                         React.createElement('button', {
                             onClick: exportToQBO,
-                            className: "flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors",
-                            disabled: timeEntries.length === 0
+                            disabled: timeEntries.length === 0,
+                            className: "flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-eggplant text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
                         },
                             React.createElement(Download),
-                            "Export for QBO"
+                            "Export to QBO"
                         )
                     )
                 ),
-                Object.keys(generateMonthlyTimesheet()).length > 0 && React.createElement('div', { className: "mb-6" },
-                    React.createElement('h2', { className: "text-xl font-semibold text-gray-900 mb-3" }, "Monthly Project Summary"),
-                    React.createElement('div', { className: "bg-gray-50 rounded-lg p-4" },
-                        React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" },
-                            Object.values(generateMonthlyTimesheet()).map((project) =>
-                                React.createElement('div', { key: project.code, className: "bg-white p-4 rounded border" },
-                                    React.createElement('div', { className: "font-semibold text-blue-600" }, project.code),
-                                    React.createElement('div', { className: "text-sm text-gray-600 mb-2" }, project.description),
-                                    React.createElement('div', { className: "text-xl font-bold text-gray-900" }, project.totalHours.toFixed(2) + "h"),
-                                    React.createElement('div', { className: "text-sm text-gray-500" }, project.entries.length + " entries")
-                                )
-                            )
-                        )
-                    )
-                ),
-                React.createElement('div', null,
-                    React.createElement('h2', { className: "text-xl font-semibold text-gray-900 mb-3" }, "Recent Time Entries"),
+
+                React.createElement('div', { className: "bg-white border-l-4 border-eggplant rounded-subtle p-6 shadow-sm" },
+                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant mb-4" }, "Recent Entries"),
                     timeEntries.length === 0 ?
                         React.createElement('div', { className: "text-center py-8 text-gray-500" },
-                            React.createElement(Clock),
-                            React.createElement('p', null, "No time entries yet. Select a project and start tracking!")
+                            React.createElement('p', null, "No time entries yet. Start tracking to see your entries here!")
                         ) :
                         React.createElement('div', { className: "overflow-x-auto" },
-                            React.createElement('table', { className: "w-full border border-gray-200 rounded-lg overflow-hidden" },
-                                React.createElement('thead', { className: "bg-gray-50" },
-                                    React.createElement('tr', null,
-                                        React.createElement('th', { className: "px-4 py-3 text-left text-sm font-semibold text-gray-700" }, "Date"),
-                                        React.createElement('th', { className: "px-4 py-3 text-left text-sm font-semibold text-gray-700" }, "Project"),
-                                        React.createElement('th', { className: "px-4 py-3 text-left text-sm font-semibold text-gray-700" }, "Description"),
-                                        React.createElement('th', { className: "px-4 py-3 text-left text-sm font-semibold text-gray-700" }, "Duration"),
-                                        React.createElement('th', { className: "px-4 py-3 text-left text-sm font-semibold text-gray-700" }, "Hours"),
-                                        React.createElement('th', { className: "px-4 py-3 text-left text-sm font-semibold text-gray-700" }, "Actions")
+                            React.createElement('table', { className: "w-full text-sm" },
+                                React.createElement('thead', null,
+                                    React.createElement('tr', { className: "border-b border-soft-gray" },
+                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Date"),
+                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Code"),
+                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Client"),
+                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Project"),
+                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Start"),
+                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "End"),
+                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Hours"),
+                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Comment"),
+                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Actions")
                                     )
                                 ),
-                                React.createElement('tbody', { className: "bg-white" },
+                                React.createElement('tbody', null,
                                     timeEntries.slice().reverse().slice(0, 10).map((entry) =>
-                                        React.createElement('tr', { key: entry.id, className: "border-t border-gray-200 hover:bg-gray-50" },
-                                            React.createElement('td', { className: "px-4 py-3 text-gray-700" }, entry.date),
-                                            React.createElement('td', { className: "px-4 py-3 font-semibold text-blue-600" }, entry.projectCode),
-                                            React.createElement('td', { className: "px-4 py-3 text-gray-700" }, entry.projectDescription),
-                                            React.createElement('td', { className: "px-4 py-3 text-gray-700" }, formatTime(entry.duration)),
-                                            React.createElement('td', { className: "px-4 py-3 font-semibold text-gray-900" }, entry.hours.toFixed(2)),
-                                            React.createElement('td', { className: "px-4 py-3" },
+                                        React.createElement('tr', { key: entry.id, className: "border-b border-soft-gray hover:bg-off-white transition-colors" },
+                                            React.createElement('td', { className: "py-3 px-2" }, entry.date),
+                                            React.createElement('td', { className: "py-3 px-2 font-semibold text-deep-green" }, entry.projectCode),
+                                            React.createElement('td', { className: "py-3 px-2 text-gray-700" }, entry.clientName),
+                                            React.createElement('td', { className: "py-3 px-2 text-gray-700" }, entry.projectName),
+                                            React.createElement('td', { className: "py-3 px-2 text-gray-600" }, entry.startTime),
+                                            React.createElement('td', { className: "py-3 px-2 text-gray-600" }, entry.endTime),
+                                            React.createElement('td', { className: "py-3 px-2 font-semibold" }, entry.hours.toFixed(2)),
+                                            React.createElement('td', { className: "py-3 px-2 text-gray-600 text-xs max-w-xs truncate" }, entry.comment || '-'),
+                                            React.createElement('td', { className: "py-3 px-2" },
                                                 React.createElement('button', {
                                                     onClick: () => deleteEntry(entry.id),
-                                                    className: "text-red-600 hover:text-red-800 text-sm font-medium"
-                                                }, "Delete")
+                                                    className: "text-gray-400 hover:text-eggplant transition-colors"
+                                                }, React.createElement(Trash2))
                                             )
                                         )
                                     )
