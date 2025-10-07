@@ -129,6 +129,17 @@
             strokeLinejoin: 'round'
         }, React.createElement('polyline', { points: '3 6 5 6 21 6' }), React.createElement('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }), React.createElement('line', { x1: '10', y1: '11', x2: '10', y2: '17' }), React.createElement('line', { x1: '14', y1: '11', x2: '14', y2: '17' }));
 
+        const Edit2 = () => React.createElement('svg', {
+            width: '18',
+            height: '18',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }), React.createElement('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }));
+
         const Settings = () => React.createElement('svg', {
             width: '20',
             height: '20',
@@ -272,6 +283,7 @@
             const [elapsedTime, setElapsedTime] = useState(0);
             const [showSetup, setShowSetup] = useState(false);
             const [storageError, setStorageError] = useState(null);
+            const [currentPage, setCurrentPage] = useState(1);
             const intervalRef = useRef(null);
 
             // New state for 4-field structure
@@ -296,6 +308,17 @@
             const [dailyGoalEnabled, setDailyGoalEnabled] = useState(false);
             const [dailyGoalHours, setDailyGoalHours] = useState(8);
             const [lastActivityTime, setLastActivityTime] = useState(Date.now());
+
+            // Notification settings
+            const [fullDayNotificationEnabled, setFullDayNotificationEnabled] = useState(true);
+            const [hourlyBreakNotificationEnabled, setHourlyBreakNotificationEnabled] = useState(true);
+            const [lastFullDayNotification, setLastFullDayNotification] = useState(null);
+            const [lastHourlyNotification, setLastHourlyNotification] = useState(null);
+            const [activeNotification, setActiveNotification] = useState(null);
+
+            // Edit entry state
+            const [editingEntry, setEditingEntry] = useState(null);
+            const [editFormData, setEditFormData] = useState({});
 
             // Search and hierarchy state
             const [projectSearchTerm, setProjectSearchTerm] = useState('');
@@ -346,6 +369,10 @@
                             setCompactMode(settings.compactMode || false);
                             setDailyGoalEnabled(settings.dailyGoalEnabled || false);
                             setDailyGoalHours(settings.dailyGoalHours || 8);
+                            setFullDayNotificationEnabled(settings.fullDayNotificationEnabled !== undefined ? settings.fullDayNotificationEnabled : true);
+                            setHourlyBreakNotificationEnabled(settings.hourlyBreakNotificationEnabled !== undefined ? settings.hourlyBreakNotificationEnabled : true);
+                            setLastFullDayNotification(settings.lastFullDayNotification || null);
+                            setLastHourlyNotification(settings.lastHourlyNotification || null);
                         }
                     } catch (error) {
                         console.error('Error loading data:', error);
@@ -367,7 +394,11 @@
                             autoPauseMinutes,
                             compactMode,
                             dailyGoalEnabled,
-                            dailyGoalHours
+                            dailyGoalHours,
+                            fullDayNotificationEnabled,
+                            hourlyBreakNotificationEnabled,
+                            lastFullDayNotification,
+                            lastHourlyNotification
                         };
 
                         await saveDataToFile({
@@ -384,7 +415,7 @@
                 // Debounce saves to avoid too many writes
                 const timeoutId = setTimeout(saveData, 500);
                 return () => clearTimeout(timeoutId);
-            }, [projectCodes, timeEntries, recentProjects, timeRounding, autoPauseEnabled, autoPauseMinutes, compactMode, dailyGoalEnabled, dailyGoalHours]);
+            }, [projectCodes, timeEntries, recentProjects, timeRounding, autoPauseEnabled, autoPauseMinutes, compactMode, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, lastFullDayNotification, lastHourlyNotification]);
 
             // Activity tracking for auto-pause
             useEffect(() => {
@@ -505,6 +536,44 @@
                 window.addEventListener('keydown', handleKeyPress);
                 return () => window.removeEventListener('keydown', handleKeyPress);
             }, [showSetup, recentProjects, projectCodes, isTracking, currentSession, selectedProject]);
+
+            // Notification check effect
+            useEffect(() => {
+                if (!isTracking) return;
+
+                const checkInterval = setInterval(() => {
+                    const now = Date.now();
+                    const today = new Date().toISOString().split('T')[0];
+
+                    // Check for 8-hour full day notification
+                    if (fullDayNotificationEnabled) {
+                        const todaysHours = getTodaysTotalHours();
+                        if (todaysHours >= 8) {
+                            const lastNotifDate = lastFullDayNotification ? new Date(lastFullDayNotification).toISOString().split('T')[0] : null;
+                            if (lastNotifDate !== today) {
+                                showNotification("🎉 That's a full day's work! You've hit 8 hours. Time to take a break!", 'success');
+                                setLastFullDayNotification(now);
+                            }
+                        }
+                    }
+
+                    // Check for hourly break reminder
+                    if (hourlyBreakNotificationEnabled && currentSession) {
+                        const sessionDuration = now - currentSession.startTime;
+                        const hoursPassed = Math.floor(sessionDuration / (1000 * 60 * 60));
+
+                        if (hoursPassed > 0) {
+                            const lastNotifHour = lastHourlyNotification ? Math.floor((now - lastHourlyNotification) / (1000 * 60 * 60)) : 999;
+                            if (lastNotifHour >= 1) {
+                                showNotification("💧 Time for a 5-minute break! Go grab a drink of water.", 'info');
+                                setLastHourlyNotification(now);
+                            }
+                        }
+                    }
+                }, 30000); // Check every 30 seconds
+
+                return () => clearInterval(checkInterval);
+            }, [isTracking, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, currentSession, lastFullDayNotification, lastHourlyNotification, timeEntries, elapsedTime]);
 
             const formatTime = (milliseconds) => {
                 const seconds = Math.floor(milliseconds / 1000);
@@ -719,11 +788,29 @@
             };
 
             const switchProject = (newProjectId) => {
-                const project = projectCodes.find(p => p.id === newProjectId);
-                if (!project) return;
+                console.log('switchProject called with:', newProjectId, 'type:', typeof newProjectId);
+
+                // Use loose equality (==) to handle type differences and compare using Math.floor for floating point issues
+                const targetId = Math.floor(typeof newProjectId === 'string' ? parseFloat(newProjectId) : newProjectId);
+                console.log('Normalized target ID:', targetId);
+
+                const project = projectCodes.find(p => {
+                    const projectId = Math.floor(typeof p.id === 'string' ? parseFloat(p.id) : p.id);
+                    console.log('Checking project:', projectId, 'against', targetId, 'Match:', projectId == targetId);
+                    return projectId == targetId;
+                });
+
+                console.log('Found project:', project);
+
+                if (!project) {
+                    console.error('Project not found!');
+                    console.error('Available project IDs:', projectCodes.map(p => p.id));
+                    return;
+                }
 
                 // Save the current session to create a time entry before switching
                 if (isTracking && currentSession) {
+                    console.log('Saving current session');
                     const endTime = Date.now();
                     const duration = roundTime(endTime - currentSession.startTime);
 
@@ -758,6 +845,8 @@
                     date: new Date().toISOString().split('T')[0]
                 };
 
+                console.log('Setting new session:', newSession);
+
                 // Update all states together
                 setCurrentSession(newSession);
                 setIsTracking(true);
@@ -765,10 +854,63 @@
                 setCurrentComment('');
                 setLastActivityTime(Date.now());
                 updateRecentProjects(project.id);
+
+                console.log('Switch complete!');
             };
 
             const deleteEntry = (id) => {
                 setTimeEntries(prev => prev.filter(entry => entry.id !== id));
+            };
+
+            const startEditEntry = (entry) => {
+                setEditingEntry(entry.id);
+                setEditFormData({
+                    date: entry.date,
+                    startTime: entry.startTime,
+                    endTime: entry.endTime,
+                    comment: entry.comment || ''
+                });
+            };
+
+            const cancelEditEntry = () => {
+                setEditingEntry(null);
+                setEditFormData({});
+            };
+
+            const saveEditEntry = () => {
+                if (!editingEntry) return;
+
+                setTimeEntries(prev => prev.map(entry => {
+                    if (entry.id === editingEntry) {
+                        // Parse times to calculate new duration
+                        const [startHour, startMin, startSec] = editFormData.startTime.split(':').map(Number);
+                        const [endHour, endMin, endSec] = editFormData.endTime.split(':').map(Number);
+
+                        const startMs = (startHour * 3600 + startMin * 60 + (startSec || 0)) * 1000;
+                        const endMs = (endHour * 3600 + endMin * 60 + (endSec || 0)) * 1000;
+
+                        let duration = endMs - startMs;
+                        if (duration < 0) duration += 24 * 3600 * 1000; // Handle overnight
+
+                        return {
+                            ...entry,
+                            date: editFormData.date,
+                            startTime: editFormData.startTime,
+                            endTime: editFormData.endTime,
+                            duration: duration,
+                            hours: duration / (1000 * 60 * 60),
+                            comment: editFormData.comment
+                        };
+                    }
+                    return entry;
+                }));
+
+                cancelEditEntry();
+            };
+
+            const showNotification = (message, type = 'info') => {
+                setActiveNotification({ message, type });
+                setTimeout(() => setActiveNotification(null), 5000);
             };
 
             const addDemoData = () => {
@@ -1099,20 +1241,52 @@
                             ),
                             React.createElement('div', { className: "flex items-center gap-2" },
                                 React.createElement('select', {
+                                    key: currentSession ? currentSession.projectId : 'no-session',
                                     value: "",
                                     onChange: (e) => {
-                                        if (e.target.value) {
-                                            const projectId = parseInt(e.target.value);
-                                            switchProject(projectId);
-                                            e.target.value = "";
+                                        const value = e.target.value;
+                                        console.log('Dropdown changed, value:', value);
+                                        if (value && value !== "") {
+                                            const projectId = parseInt(value);
+                                            console.log('Switching to project ID:', projectId);
+                                            if (!isNaN(projectId)) {
+                                                switchProject(projectId);
+                                            }
                                         }
                                     },
                                     className: "px-3 py-1.5 text-xs border border-soft-gray rounded-subtle bg-white text-gray-700 hover:border-deep-green focus:outline-none focus:border-deep-green transition-colors cursor-pointer"
                                 },
                                     React.createElement('option', { value: "" }, "Switch to..."),
-                                    projectCodes.filter(p => p.id !== currentSession.projectId).map(project => {
-                                        return React.createElement('option', { key: project.id, value: project.id }, project.code);
-                                    })
+                                    (() => {
+                                        const availableProjects = projectCodes.filter(p => p.id !== currentSession.projectId);
+                                        const recentAvailable = recentProjects
+                                            .filter(id => id !== currentSession.projectId)
+                                            .map(id => availableProjects.find(p => p.id === id))
+                                            .filter(p => p);
+                                        const otherProjects = availableProjects.filter(p => !recentProjects.includes(p.id));
+
+                                        let result = [];
+
+                                        // Add recent projects with marker
+                                        if (recentAvailable.length > 0) {
+                                            result.push(React.createElement('option', { key: 'recent-header', disabled: true, style: { fontWeight: 'bold' } }, '── Recent Projects ──'));
+                                            recentAvailable.slice(0, 9).forEach(project => {
+                                                result.push(React.createElement('option', { key: project.id, value: project.id }, '⭐ ' + project.code));
+                                            });
+                                        }
+
+                                        // Add separator and other projects
+                                        if (otherProjects.length > 0) {
+                                            if (recentAvailable.length > 0) {
+                                                result.push(React.createElement('option', { key: 'other-header', disabled: true, style: { fontWeight: 'bold' } }, '── All Projects ──'));
+                                            }
+                                            otherProjects.forEach(project => {
+                                                result.push(React.createElement('option', { key: project.id, value: project.id }, project.code));
+                                            });
+                                        }
+
+                                        return result;
+                                    })()
                                 ),
                                 React.createElement('button', {
                                     onClick: stopTracking,
@@ -1258,6 +1432,38 @@
                                         }),
                                         React.createElement('span', { className: "text-gray-700" }, "hours per day")
                                     )
+                                ),
+
+                                React.createElement('div', { className: "border-t border-soft-gray pt-6 pb-6" },
+                                    React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Full Day Notification"),
+                                        React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                            React.createElement('input', {
+                                                type: "checkbox",
+                                                checked: fullDayNotificationEnabled,
+                                                onChange: (e) => setFullDayNotificationEnabled(e.target.checked),
+                                                className: "sr-only peer"
+                                            }),
+                                            React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                        )
+                                    ),
+                                    React.createElement('p', { className: "text-sm text-gray-600" }, "Get notified after 8 hours of work to take a break")
+                                ),
+
+                                React.createElement('div', { className: "pb-6" },
+                                    React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Hourly Break Reminder"),
+                                        React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                            React.createElement('input', {
+                                                type: "checkbox",
+                                                checked: hourlyBreakNotificationEnabled,
+                                                onChange: (e) => setHourlyBreakNotificationEnabled(e.target.checked),
+                                                className: "sr-only peer"
+                                            }),
+                                            React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                        )
+                                    ),
+                                    React.createElement('p', { className: "text-sm text-gray-600" }, "Get reminded every hour to take a 5-minute break")
                                 )
                             )
                         )
@@ -1751,20 +1957,52 @@
                         ),
                         React.createElement('div', { className: "flex items-center gap-2" },
                             React.createElement('select', {
+                                key: currentSession ? currentSession.projectId : 'no-session',
                                 value: "",
                                 onChange: (e) => {
-                                    if (e.target.value) {
-                                        const projectId = parseInt(e.target.value);
-                                        switchProject(projectId);
-                                        e.target.value = "";
+                                    const value = e.target.value;
+                                    console.log('Dropdown changed, value:', value);
+                                    if (value && value !== "") {
+                                        const projectId = parseInt(value);
+                                        console.log('Switching to project ID:', projectId);
+                                        if (!isNaN(projectId)) {
+                                            switchProject(projectId);
+                                        }
                                     }
                                 },
                                 className: "px-3 py-1.5 text-xs border border-soft-gray rounded-subtle bg-white text-gray-700 hover:border-deep-green focus:outline-none focus:border-deep-green transition-colors cursor-pointer"
                             },
                                 React.createElement('option', { value: "" }, "Switch to..."),
-                                projectCodes.filter(p => p.id !== currentSession.projectId).map(project => {
-                                    return React.createElement('option', { key: project.id, value: project.id }, project.code);
-                                })
+                                (() => {
+                                    const availableProjects = projectCodes.filter(p => p.id !== currentSession.projectId);
+                                    const recentAvailable = recentProjects
+                                        .filter(id => id !== currentSession.projectId)
+                                        .map(id => availableProjects.find(p => p.id === id))
+                                        .filter(p => p);
+                                    const otherProjects = availableProjects.filter(p => !recentProjects.includes(p.id));
+
+                                    let result = [];
+
+                                    // Add recent projects with marker
+                                    if (recentAvailable.length > 0) {
+                                        result.push(React.createElement('option', { key: 'recent-header', disabled: true, style: { fontWeight: 'bold' } }, '── Recent Projects ──'));
+                                        recentAvailable.slice(0, 9).forEach(project => {
+                                            result.push(React.createElement('option', { key: project.id, value: project.id }, '⭐ ' + project.code));
+                                        });
+                                    }
+
+                                    // Add separator and other projects
+                                    if (otherProjects.length > 0) {
+                                        if (recentAvailable.length > 0) {
+                                            result.push(React.createElement('option', { key: 'other-header', disabled: true, style: { fontWeight: 'bold' } }, '── All Projects ──'));
+                                        }
+                                        otherProjects.forEach(project => {
+                                            result.push(React.createElement('option', { key: project.id, value: project.id }, project.code));
+                                        });
+                                    }
+
+                                    return result;
+                                })()
                             ),
                             React.createElement('button', {
                                 onClick: stopTracking,
@@ -1910,6 +2148,38 @@
                                     }),
                                     React.createElement('span', { className: "text-gray-700" }, "hours per day")
                                 )
+                            ),
+
+                            React.createElement('div', { className: "border-t border-soft-gray pt-6 pb-6" },
+                                React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Full Day Notification"),
+                                    React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                        React.createElement('input', {
+                                            type: "checkbox",
+                                            checked: fullDayNotificationEnabled,
+                                            onChange: (e) => setFullDayNotificationEnabled(e.target.checked),
+                                            className: "sr-only peer"
+                                        }),
+                                        React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                    )
+                                ),
+                                React.createElement('p', { className: "text-sm text-gray-600" }, "Get notified after 8 hours of work to take a break")
+                            ),
+
+                            React.createElement('div', { className: "pb-6" },
+                                React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Hourly Break Reminder"),
+                                    React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                        React.createElement('input', {
+                                            type: "checkbox",
+                                            checked: hourlyBreakNotificationEnabled,
+                                            onChange: (e) => setHourlyBreakNotificationEnabled(e.target.checked),
+                                            className: "sr-only peer"
+                                        }),
+                                        React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                    )
+                                ),
+                                React.createElement('p', { className: "text-sm text-gray-600" }, "Get reminded every hour to take a 5-minute break")
                             )
                         )
                     )
@@ -2163,43 +2433,201 @@
                         React.createElement('div', { className: "text-center py-8 text-gray-500" },
                             React.createElement('p', null, "No time entries yet. Start tracking to see your entries here!")
                         ) :
-                        React.createElement('div', { className: "overflow-x-auto" },
-                            React.createElement('table', { className: "w-full text-sm" },
-                                React.createElement('thead', null,
-                                    React.createElement('tr', { className: "border-b border-soft-gray" },
-                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Date"),
-                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Code"),
-                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Client"),
-                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Project"),
-                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Start"),
-                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "End"),
-                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Hours"),
-                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Comment"),
-                                        React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Actions")
-                                    )
-                                ),
-                                React.createElement('tbody', null,
-                                    timeEntries.slice().reverse().slice(0, 10).map((entry) =>
-                                        React.createElement('tr', { key: entry.id, className: "border-b border-soft-gray hover:bg-off-white transition-colors" },
-                                            React.createElement('td', { className: "py-3 px-2" }, entry.date),
-                                            React.createElement('td', { className: "py-3 px-2 font-semibold text-deep-green" }, entry.projectCode),
-                                            React.createElement('td', { className: "py-3 px-2 text-gray-700" }, entry.clientName),
-                                            React.createElement('td', { className: "py-3 px-2 text-gray-700" }, entry.projectName),
-                                            React.createElement('td', { className: "py-3 px-2 text-gray-600" }, entry.startTime),
-                                            React.createElement('td', { className: "py-3 px-2 text-gray-600" }, entry.endTime),
-                                            React.createElement('td', { className: "py-3 px-2 font-semibold" }, entry.hours.toFixed(2)),
-                                            React.createElement('td', { className: "py-3 px-2 text-gray-600 text-xs max-w-xs truncate" }, entry.comment || '-'),
-                                            React.createElement('td', { className: "py-3 px-2" },
-                                                React.createElement('button', {
-                                                    onClick: () => deleteEntry(entry.id),
-                                                    className: "text-gray-400 hover:text-eggplant transition-colors"
-                                                }, React.createElement(Trash2))
-                                            )
+                        React.createElement('div', null,
+                            React.createElement('div', { className: "overflow-x-auto" },
+                                React.createElement('table', { className: "w-full text-sm" },
+                                    React.createElement('thead', null,
+                                        React.createElement('tr', { className: "border-b border-soft-gray" },
+                                            React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Date"),
+                                            React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Code"),
+                                            React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Client"),
+                                            React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Project"),
+                                            React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Start"),
+                                            React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "End"),
+                                            React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Hours"),
+                                            React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Comment"),
+                                            React.createElement('th', { className: "text-left py-3 px-2 font-semibold text-gray-700" }, "Actions")
                                         )
+                                    ),
+                                    React.createElement('tbody', null,
+                                        (() => {
+                                            const entriesPerPage = 10;
+                                            const reversedEntries = timeEntries.slice().reverse();
+                                            const totalPages = Math.ceil(reversedEntries.length / entriesPerPage);
+                                            const startIndex = (currentPage - 1) * entriesPerPage;
+                                            const endIndex = startIndex + entriesPerPage;
+                                            const currentEntries = reversedEntries.slice(startIndex, endIndex);
+
+                                            return currentEntries.map((entry) =>
+                                                React.createElement('tr', { key: entry.id, className: "border-b border-soft-gray hover:bg-off-white transition-colors" },
+                                                    React.createElement('td', { className: "py-3 px-2" }, entry.date),
+                                                    React.createElement('td', { className: "py-3 px-2 font-semibold text-deep-green" }, entry.projectCode),
+                                                    React.createElement('td', { className: "py-3 px-2 text-gray-700" }, entry.clientName),
+                                                    React.createElement('td', { className: "py-3 px-2 text-gray-700" }, entry.projectName),
+                                                    React.createElement('td', { className: "py-3 px-2 text-gray-600" }, entry.startTime),
+                                                    React.createElement('td', { className: "py-3 px-2 text-gray-600" }, entry.endTime),
+                                                    React.createElement('td', { className: "py-3 px-2 font-semibold" }, entry.hours.toFixed(2)),
+                                                    React.createElement('td', { className: "py-3 px-2 text-gray-600 text-xs max-w-xs truncate" }, entry.comment || '-'),
+                                                    React.createElement('td', { className: "py-3 px-2" },
+                                                        React.createElement('div', { className: "flex items-center gap-2" },
+                                                            React.createElement('button', {
+                                                                onClick: () => startEditEntry(entry),
+                                                                className: "text-gray-400 hover:text-deep-green transition-colors",
+                                                                title: "Edit entry"
+                                                            }, React.createElement(Edit2)),
+                                                            React.createElement('button', {
+                                                                onClick: () => deleteEntry(entry.id),
+                                                                className: "text-gray-400 hover:text-eggplant transition-colors",
+                                                                title: "Delete entry"
+                                                            }, React.createElement(Trash2))
+                                                        )
+                                                    )
+                                                )
+                                            );
+                                        })()
                                     )
                                 )
-                            )
+                            ),
+                            // Pagination controls
+                            (() => {
+                                const entriesPerPage = 10;
+                                const totalPages = Math.ceil(timeEntries.length / entriesPerPage);
+
+                                if (totalPages <= 1) return null;
+
+                                const getPageNumbers = () => {
+                                    const pages = [];
+                                    const maxVisible = 10;
+
+                                    if (totalPages <= maxVisible) {
+                                        // Show all pages
+                                        for (let i = 1; i <= totalPages; i++) {
+                                            pages.push(i);
+                                        }
+                                    } else {
+                                        // Show first 10 pages and ellipsis
+                                        for (let i = 1; i <= Math.min(maxVisible, totalPages); i++) {
+                                            pages.push(i);
+                                        }
+                                        if (totalPages > maxVisible) {
+                                            pages.push('...');
+                                        }
+                                    }
+
+                                    return pages;
+                                };
+
+                                return React.createElement('div', { className: "flex items-center justify-center gap-2 mt-4 flex-wrap" },
+                                    // Previous button
+                                    React.createElement('button', {
+                                        onClick: () => setCurrentPage(Math.max(1, currentPage - 1)),
+                                        disabled: currentPage === 1,
+                                        className: "px-3 py-1 rounded-subtle border border-soft-gray hover:border-deep-green disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    }, "← Prev"),
+
+                                    // Page numbers
+                                    getPageNumbers().map((page, index) => {
+                                        if (page === '...') {
+                                            return React.createElement('span', { key: `ellipsis-${index}`, className: "px-2 text-gray-400" }, '...');
+                                        }
+
+                                        return React.createElement('button', {
+                                            key: page,
+                                            onClick: () => setCurrentPage(page),
+                                            className: currentPage === page
+                                                ? "px-3 py-1 rounded-subtle bg-deep-green text-white font-semibold"
+                                                : "px-3 py-1 rounded-subtle border border-soft-gray hover:border-deep-green transition-colors"
+                                        }, page);
+                                    }),
+
+                                    // Next button
+                                    React.createElement('button', {
+                                        onClick: () => setCurrentPage(Math.min(totalPages, currentPage + 1)),
+                                        disabled: currentPage === totalPages,
+                                        className: "px-3 py-1 rounded-subtle border border-soft-gray hover:border-deep-green disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    }, "Next →")
+                                );
+                            })()
                         )
+                ),
+                // Notification Toast
+                activeNotification && React.createElement('div', {
+                    className: "fixed top-4 right-4 z-50 animate-slide-in"
+                },
+                    React.createElement('div', {
+                        className: "bg-white border-l-4 rounded-subtle shadow-xl p-4 max-w-sm flex items-start gap-3 " + (activeNotification.type === 'success' ? "border-deep-green" : "border-eggplant")
+                    },
+                        React.createElement('div', { className: "flex-1" },
+                            React.createElement('p', { className: "text-sm text-gray-800" }, activeNotification.message)
+                        ),
+                        React.createElement('button', {
+                            onClick: () => setActiveNotification(null),
+                            className: "text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none"
+                        }, "×")
+                    )
+                ),
+                // Edit Entry Modal
+                editingEntry && React.createElement('div', {
+                    className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
+                    onClick: cancelEditEntry
+                },
+                    React.createElement('div', {
+                        className: "bg-white rounded-subtle shadow-xl p-6 max-w-md w-full mx-4",
+                        onClick: (e) => e.stopPropagation()
+                    },
+                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant mb-4" }, "Edit Time Entry"),
+                        React.createElement('div', { className: "space-y-4" },
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "Date"),
+                                React.createElement('input', {
+                                    type: "date",
+                                    value: editFormData.date || '',
+                                    onChange: (e) => setEditFormData({ ...editFormData, date: e.target.value }),
+                                    className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                })
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "Start Time"),
+                                React.createElement('input', {
+                                    type: "time",
+                                    step: "1",
+                                    value: editFormData.startTime || '',
+                                    onChange: (e) => setEditFormData({ ...editFormData, startTime: e.target.value }),
+                                    className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                })
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "End Time"),
+                                React.createElement('input', {
+                                    type: "time",
+                                    step: "1",
+                                    value: editFormData.endTime || '',
+                                    onChange: (e) => setEditFormData({ ...editFormData, endTime: e.target.value }),
+                                    className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                })
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "Comment"),
+                                React.createElement('input', {
+                                    type: "text",
+                                    value: editFormData.comment || '',
+                                    onChange: (e) => setEditFormData({ ...editFormData, comment: e.target.value }),
+                                    placeholder: "Add comment (optional)...",
+                                    className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                })
+                            )
+                        ),
+                        React.createElement('div', { className: "flex items-center justify-end gap-3 mt-6" },
+                            React.createElement('button', {
+                                onClick: cancelEditEntry,
+                                className: "px-4 py-2 text-sm border border-soft-gray rounded-subtle hover:border-gray-400 transition-colors"
+                            }, "Cancel"),
+                            React.createElement('button', {
+                                onClick: saveEditEntry,
+                                className: "px-4 py-2 text-sm bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-colors"
+                            }, "Save Changes")
+                        )
+                    )
                 )
             );
         };
