@@ -1113,38 +1113,6 @@
                 window.URL.revokeObjectURL(url);
             };
 
-            const exportToQBO = () => {
-                const filteredEntries = timeEntries.filter(entry => {
-                    let matches = true;
-                    if (filterStartDate && entry.date < filterStartDate) matches = false;
-                    if (filterEndDate && entry.date > filterEndDate) matches = false;
-                    return matches;
-                });
-
-                const qboHeaders = ['Date', 'Service Item', 'Description', 'Qty', 'Rate', 'Customer:Job'];
-                const qboRows = filteredEntries.map(entry => [
-                    entry.date,
-                    'Consulting Services',
-                    entry.projectCode + ' - ' + entry.projectName,
-                    entry.hours.toFixed(2),
-                    '',
-                    entry.clientName
-                ]);
-
-                const csvContent = [
-                    qboHeaders.join(','),
-                    ...qboRows.map(row => row.join(','))
-                ].join('\n');
-
-                const blob = new Blob([csvContent], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = "qbo-timesheet-" + (filterStartDate || new Date().toISOString().split('T')[0]) + ".csv";
-                a.click();
-                window.URL.revokeObjectURL(url);
-            };
-
             const getUniqueClients = () => {
                 const clients = new Set(timeEntries.map(e => e.clientName));
                 return Array.from(clients).sort();
@@ -2407,23 +2375,13 @@
                             )
                         )
                     ),
-                    React.createElement('div', { className: "flex gap-3" },
-                        React.createElement('button', {
-                            onClick: exportToCSV,
-                            disabled: timeEntries.length === 0,
-                            className: "flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        },
-                            React.createElement(Download),
-                            "Export to CSV"
-                        ),
-                        React.createElement('button', {
-                            onClick: exportToQBO,
-                            disabled: timeEntries.length === 0,
-                            className: "flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-eggplant text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        },
-                            React.createElement(Download),
-                            "Export to QBO"
-                        )
+                    React.createElement('button', {
+                        onClick: exportToCSV,
+                        disabled: timeEntries.length === 0,
+                        className: "w-full flex items-center justify-center gap-2 px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    },
+                        React.createElement(Download),
+                        "Export to CSV"
                     )
                 ),
 
