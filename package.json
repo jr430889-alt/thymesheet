@@ -1,27 +1,31 @@
 {
-  "name": "grindstone-time-tracker",
-  "version": "1.0.0",
-  "description": "Desktop time tracking app",
+  "name": "thymesheet",
+  "version": "2.0.0",
+  "description": "ThymeSheet - Professional time tracking for consultants",
   "main": "main.js",
-  "author": "Jeremy's Time Tracker Team",
+  "author": "Jeremy",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "build-win": "electron-builder --win --x64"
+    "build-win": "electron-builder --win --x64",
+    "dist": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64"
   },
   "build": {
-    "appId": "com.jeremy.timetracker",
-    "productName": "Jeremy's Time Tracker",
+    "appId": "com.jeremy.thymesheet",
+    "productName": "ThymeSheet",
     "directories": {
       "output": "dist"
     },
     "files": [
       "main.js",
       "Jeremy-Time-Tracker.html",
+      "logo.png",
       "package.json"
     ],
     "win": {
-      "target": "portable"
+      "target": ["portable"],
+      "icon": "icon-hq.ico",
+      "sign": false
     }
   },
   "devDependencies": {
