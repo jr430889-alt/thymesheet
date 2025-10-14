@@ -173,6 +173,28 @@
             strokeLinejoin: 'round'
         }, React.createElement('path', { d: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z' }));
 
+        const RefreshCw = ({ size = 20 } = {}) => React.createElement('svg', {
+            width: size,
+            height: size,
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('polyline', { points: '23 4 23 10 17 10' }), React.createElement('polyline', { points: '1 20 1 14 7 14' }), React.createElement('path', { d: 'M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15' }));
+
+        const FolderOpen = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('path', { d: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z' }), React.createElement('polyline', { points: '2 8 4 20 20 20 22 8' }));
+
         const Tag = () => React.createElement('svg', {
             width: '18',
             height: '18',
@@ -291,6 +313,7 @@
             const [newProjectName, setNewProjectName] = useState('');
             const [newTaskCode, setNewTaskCode] = useState('');
             const [newSubtaskCode, setNewSubtaskCode] = useState('');
+            const [linkedCSVPath, setLinkedCSVPath] = useState(null);
 
             // New state for comments
             const [currentComment, setCurrentComment] = useState('');
@@ -319,6 +342,13 @@
             // Edit entry state
             const [editingEntry, setEditingEntry] = useState(null);
             const [editFormData, setEditFormData] = useState({});
+
+            // Update notification state
+            const [updateAvailable, setUpdateAvailable] = useState(false);
+            const [updateInfo, setUpdateInfo] = useState(null);
+            const [downloadProgress, setDownloadProgress] = useState(0);
+            const [isDownloading, setIsDownloading] = useState(false);
+            const [updateDownloaded, setUpdateDownloaded] = useState(false);
 
             // Search and hierarchy state
             const [projectSearchTerm, setProjectSearchTerm] = useState('');
@@ -361,6 +391,10 @@
                             setRecentProjects(data.recentProjects);
                         }
 
+                        if (data && data.linkedCSVPath) {
+                            setLinkedCSVPath(data.linkedCSVPath);
+                        }
+
                         if (data && data.settings) {
                             const settings = data.settings;
                             setTimeRounding(settings.timeRounding || 'none');
@@ -373,6 +407,18 @@
                             setHourlyBreakNotificationEnabled(settings.hourlyBreakNotificationEnabled !== undefined ? settings.hourlyBreakNotificationEnabled : true);
                             setLastFullDayNotification(settings.lastFullDayNotification || null);
                             setLastHourlyNotification(settings.lastHourlyNotification || null);
+                        }
+
+                        // Restore active session if it exists
+                        if (data && data.activeSession) {
+                            const session = data.activeSession;
+                            console.log('Restoring active session:', session);
+                            setCurrentSession(session);
+                            setIsTracking(true);
+                            setElapsedTime(session.elapsedTime || 0);
+                            setCurrentComment(session.currentComment || '');
+                            setLastActivityTime(Date.now());
+                            setSelectedProject(session.projectId);
                         }
                     } catch (error) {
                         console.error('Error loading data:', error);
@@ -401,11 +447,20 @@
                             lastHourlyNotification
                         };
 
+                        // Save current session info if tracking
+                        const activeSession = isTracking && currentSession ? {
+                            ...currentSession,
+                            elapsedTime: elapsedTime,
+                            currentComment: currentComment
+                        } : null;
+
                         await saveDataToFile({
                             projectCodes,
                             timeEntries,
                             recentProjects,
-                            settings
+                            linkedCSVPath,
+                            settings,
+                            activeSession
                         });
                     } catch (error) {
                         console.error('Failed to save data:', error);
@@ -415,7 +470,7 @@
                 // Debounce saves to avoid too many writes
                 const timeoutId = setTimeout(saveData, 500);
                 return () => clearTimeout(timeoutId);
-            }, [projectCodes, timeEntries, recentProjects, timeRounding, autoPauseEnabled, autoPauseMinutes, compactMode, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, lastFullDayNotification, lastHourlyNotification]);
+            }, [projectCodes, timeEntries, recentProjects, linkedCSVPath, timeRounding, autoPauseEnabled, autoPauseMinutes, compactMode, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, lastFullDayNotification, lastHourlyNotification, isTracking, currentSession, elapsedTime, currentComment]);
 
             // Activity tracking for auto-pause
             useEffect(() => {
@@ -758,6 +813,45 @@
                 };
             }, []);
 
+            // Listen for update events
+            useEffect(() => {
+                if (!ipcRenderer) return;
+
+                const handleUpdateAvailable = (event, info) => {
+                    console.log('Update available:', info);
+                    setUpdateAvailable(true);
+                    setUpdateInfo(info);
+                };
+
+                const handleDownloadProgress = (event, progressObj) => {
+                    console.log('Download progress:', progressObj);
+                    setDownloadProgress(progressObj.percent);
+                };
+
+                const handleUpdateDownloaded = (event, info) => {
+                    console.log('Update downloaded:', info);
+                    setIsDownloading(false);
+                    setUpdateDownloaded(true);
+                };
+
+                const handleUpdateError = (event, error) => {
+                    console.error('Update error:', error);
+                    setIsDownloading(false);
+                };
+
+                ipcRenderer.on('update-available', handleUpdateAvailable);
+                ipcRenderer.on('download-progress', handleDownloadProgress);
+                ipcRenderer.on('update-downloaded', handleUpdateDownloaded);
+                ipcRenderer.on('update-error', handleUpdateError);
+
+                return () => {
+                    ipcRenderer.removeListener('update-available', handleUpdateAvailable);
+                    ipcRenderer.removeListener('download-progress', handleDownloadProgress);
+                    ipcRenderer.removeListener('update-downloaded', handleUpdateDownloaded);
+                    ipcRenderer.removeListener('update-error', handleUpdateError);
+                };
+            }, []);
+
             const stopTracking = () => {
                 if (currentSession) {
                     const endTime = Date.now();
@@ -863,12 +957,32 @@
             };
 
             const startEditEntry = (entry) => {
+                // Convert locale time string (e.g., "3:45:30 PM") to 24-hour format (e.g., "15:45:30") for time input
+                const convertToTimeInputFormat = (timeStr) => {
+                    if (!timeStr) return '';
+                    // If already in 24-hour format (HH:MM:SS), return as is
+                    if (/^\d{2}:\d{2}(:\d{2})?$/.test(timeStr)) return timeStr;
+
+                    // Parse locale time string
+                    const today = new Date().toISOString().split('T')[0];
+                    const dateTimeStr = today + ' ' + timeStr;
+                    const date = new Date(dateTimeStr);
+
+                    if (isNaN(date.getTime())) return timeStr; // Return original if parse fails
+
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    const seconds = String(date.getSeconds()).padStart(2, '0');
+                    return `${hours}:${minutes}:${seconds}`;
+                };
+
                 setEditingEntry(entry.id);
                 setEditFormData({
                     date: entry.date,
-                    startTime: entry.startTime,
-                    endTime: entry.endTime,
-                    comment: entry.comment || ''
+                    startTime: convertToTimeInputFormat(entry.startTime),
+                    endTime: convertToTimeInputFormat(entry.endTime),
+                    comment: entry.comment || '',
+                    projectId: entry.projectId
                 });
             };
 
@@ -892,6 +1006,9 @@
                         let duration = endMs - startMs;
                         if (duration < 0) duration += 24 * 3600 * 1000; // Handle overnight
 
+                        // Get updated project information if project was changed
+                        const project = projectCodes.find(p => p.id === editFormData.projectId);
+
                         return {
                             ...entry,
                             date: editFormData.date,
@@ -899,7 +1016,13 @@
                             endTime: editFormData.endTime,
                             duration: duration,
                             hours: duration / (1000 * 60 * 60),
-                            comment: editFormData.comment
+                            comment: editFormData.comment,
+                            projectId: editFormData.projectId,
+                            projectCode: project ? project.code : entry.projectCode,
+                            clientName: project ? project.clientName : entry.clientName,
+                            projectName: project ? project.projectName : entry.projectName,
+                            taskCode: project ? project.taskCode : entry.taskCode,
+                            subtaskCode: project ? project.subtaskCode : entry.subtaskCode
                         };
                     }
                     return entry;
@@ -909,8 +1032,14 @@
             };
 
             const showNotification = (message, type = 'info') => {
-                setActiveNotification({ message, type });
-                setTimeout(() => setActiveNotification(null), 5000);
+                console.log("showNotification called with:", message, type);
+                const notif = { message, type };
+                console.log("Setting activeNotification to:", notif);
+                setActiveNotification(notif);
+                setTimeout(() => {
+                    console.log("Clearing notification");
+                    setActiveNotification(null);
+                }, 5000);
             };
 
             const addDemoData = () => {
@@ -938,6 +1067,21 @@
                 a.download = 'timesheet-template.csv';
                 a.click();
                 window.URL.revokeObjectURL(url);
+            };
+
+            // Update handler functions
+            const handleDownloadUpdate = async () => {
+                setIsDownloading(true);
+                await ipcRenderer.invoke('download-update');
+            };
+
+            const handleInstallUpdate = async () => {
+                await ipcRenderer.invoke('install-update');
+            };
+
+            const handleDismissUpdate = () => {
+                setUpdateAvailable(false);
+                setUpdateDownloaded(false);
             };
 
             const handleCSVImport = (event) => {
@@ -969,14 +1113,115 @@
                         });
 
                         setProjectCodes(prev => [...prev, ...importedProjects]);
-                        setStorageError("Successfully imported " + importedProjects.length + " project(s)");
+                        console.log("Calling showNotification after file input import");
+                        showNotification("Project code(s) successfully uploaded", 'success');
 
                         event.target.value = '';
                     } catch (error) {
-                        setStorageError("Import failed: " + error.message);
+                        console.log("Import error:", error);
+                        showNotification("Import failed: " + error.message, 'info');
                     }
                 };
                 reader.readAsText(file);
+            };
+
+            const browseCSVFile = async () => {
+                try {
+                    const result = await window.require('electron').ipcRenderer.invoke('browse-csv-file');
+                    if (result.success && result.content) {
+                        const text = result.content;
+                        const lines = text.split('\n').filter(line => line.trim());
+                        const dataLines = lines.slice(1);
+
+                        const importedProjects = dataLines.map((line, index) => {
+                            const values = line.split(',').map(v => v.trim());
+                            if (values.length < 4) {
+                                throw new Error("Line " + (index + 2) + ": Expected 4 columns, got " + values.length);
+                            }
+
+                            const [clientName, projectName, taskCode, subtaskCode] = values;
+                            return {
+                                id: Date.now() + Math.random() + index,
+                                clientName,
+                                projectName,
+                                taskCode: taskCode.toUpperCase(),
+                                subtaskCode: subtaskCode.toUpperCase(),
+                                code: taskCode.toUpperCase() + '-' + subtaskCode.toUpperCase()
+                            };
+                        });
+
+                        setProjectCodes(prev => [...prev, ...importedProjects]);
+                        setLinkedCSVPath(result.path);
+                        console.log("Calling showNotification after browse CSV import");
+                        showNotification("Project code(s) successfully uploaded and linked", 'success');
+                    } else if (result.canceled) {
+                        // User canceled, do nothing
+                    } else {
+                        showNotification("Failed to browse CSV file: " + (result.error || "Unknown error"), 'info');
+                    }
+                } catch (error) {
+                    console.log("Browse CSV error:", error);
+                    showNotification("Import failed: " + error.message, 'info');
+                }
+            };
+
+            const refreshFromCSV = async () => {
+                if (!linkedCSVPath) {
+                    showNotification("No linked CSV file. Please browse and select a CSV file first.", 'info');
+                    return;
+                }
+
+                try {
+                    const fs = window.require('fs');
+                    const csvContent = fs.readFileSync(linkedCSVPath, 'utf8');
+                    const lines = csvContent.split('\n').filter(line => line.trim());
+                    const dataLines = lines.slice(1);
+
+                    const importedProjects = dataLines.map((line, index) => {
+                        const values = line.split(',').map(v => v.trim());
+                        if (values.length < 4) {
+                            throw new Error("Line " + (index + 2) + ": Expected 4 columns, got " + values.length);
+                        }
+
+                        const [clientName, projectName, taskCode, subtaskCode] = values;
+                        return {
+                            id: Date.now() + Math.random() + index,
+                            clientName,
+                            projectName,
+                            taskCode: taskCode.toUpperCase(),
+                            subtaskCode: subtaskCode.toUpperCase(),
+                            code: taskCode.toUpperCase() + '-' + subtaskCode.toUpperCase()
+                        };
+                    });
+
+                    setProjectCodes(importedProjects);
+                    showNotification("Refreshed " + importedProjects.length + " project code(s) from CSV", 'success');
+                } catch (error) {
+                    console.log("Refresh CSV error:", error);
+                    showNotification("Failed to refresh from CSV: " + error.message, 'info');
+                    // Clear invalid path
+                    setLinkedCSVPath(null);
+                }
+            };
+
+            const deleteAllByClient = (clientName) => {
+                const confirmed = window.confirm("Delete all projects for client \"" + clientName + "\"?\n\nThis cannot be undone.");
+                if (confirmed) {
+                    const remaining = projectCodes.filter(p => p.clientName !== clientName);
+                    const deleted = projectCodes.length - remaining.length;
+                    setProjectCodes(remaining);
+                    setStorageError("Deleted " + deleted + " project(s) for " + clientName);
+                }
+            };
+
+            const deleteAllByProject = (clientName, projectName) => {
+                const confirmed = window.confirm("Delete all codes for \"" + projectName + "\" under client \"" + clientName + "\"?\n\nThis cannot be undone.");
+                if (confirmed) {
+                    const remaining = projectCodes.filter(p => !(p.clientName === clientName && p.projectName === projectName));
+                    const deleted = projectCodes.length - remaining.length;
+                    setProjectCodes(remaining);
+                    setStorageError("Deleted " + deleted + " code(s) for " + projectName);
+                }
             };
 
             const toggleClient = (clientName) => {
@@ -1773,7 +2018,14 @@
                             )
                         ),
 
-                        React.createElement('div', { className: "flex items-center gap-4" },
+                        React.createElement('div', { className: "flex items-center gap-4 flex-wrap" },
+                            React.createElement('button', {
+                                onClick: browseCSVFile,
+                                className: 'flex items-center gap-2 px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium'
+                            },
+                                React.createElement(FolderOpen),
+                                "Browse CSV File"
+                            ),
                             React.createElement('input', {
                                 type: 'file',
                                 accept: '.csv,.txt',
@@ -1783,7 +2035,7 @@
                             }),
                             React.createElement('label', {
                                 htmlFor: 'csv-upload',
-                                className: 'flex items-center gap-2 px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium cursor-pointer'
+                                className: 'flex items-center gap-2 px-6 py-3 border-2 border-deep-green text-deep-green rounded-subtle hover:bg-deep-green hover:text-white transition-all font-medium cursor-pointer'
                             },
                                 React.createElement(Upload),
                                 "Upload CSV File"
@@ -1795,10 +2047,32 @@
                                 React.createElement(Download),
                                 "Download Template"
                             )
+                        ),
+                        linkedCSVPath && React.createElement('div', { className: "mt-4 p-4 bg-soft-gray rounded-subtle" },
+                            React.createElement('p', { className: "text-sm text-gray-700 mb-2" },
+                                React.createElement('strong', null, "Linked CSV: "),
+                                linkedCSVPath
+                            ),
+                            React.createElement('button', {
+                                onClick: refreshFromCSV,
+                                className: 'flex items-center gap-2 px-4 py-2 bg-eggplant text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium text-sm'
+                            },
+                                React.createElement(RefreshCw),
+                                "Refresh Projects from CSV"
+                            )
                         )
                     ),
                     projectCodes.length > 0 && React.createElement('div', { className: "mb-8" },
-                        React.createElement('h2', { className: "text-xl font-semibold text-eggplant mb-6" }, "Your Projects"),
+                        React.createElement('div', { className: "flex items-center justify-between mb-6" },
+                            React.createElement('h2', { className: "text-xl font-semibold text-eggplant" }, "Your Projects"),
+                            linkedCSVPath && React.createElement('button', {
+                                onClick: refreshFromCSV,
+                                className: 'flex items-center gap-2 px-4 py-2 bg-eggplant text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium text-sm'
+                            },
+                                React.createElement(RefreshCw, { size: 16 }),
+                                "Refresh from CSV"
+                            )
+                        ),
                         React.createElement('div', { className: "mb-5" },
                             React.createElement('div', { className: "relative" },
                                 React.createElement('input', {
@@ -1817,42 +2091,62 @@
                         React.createElement('div', { className: "space-y-3" },
                             Object.entries(organizeProjectsByHierarchy()).map(([clientName, clientProjects]) =>
                                 React.createElement('div', { key: clientName, className: "bg-white border border-soft-gray rounded-subtle overflow-hidden" },
-                                    React.createElement('button', {
-                                        onClick: () => toggleClient(clientName),
-                                        className: "w-full flex items-center justify-between p-4 bg-pearl hover:bg-opacity-70 transition-colors text-left"
-                                    },
-                                        React.createElement('div', { className: "flex items-center gap-2" },
-                                            React.createElement(Building),
-                                            React.createElement('span', { className: "font-semibold text-eggplant" }, clientName)
-                                        ),
-                                        React.createElement('div', { className: "flex items-center gap-3" },
-                                            React.createElement('span', { className: "text-sm text-gray-600" },
-                                                Object.keys(clientProjects).length + " project" + (Object.keys(clientProjects).length !== 1 ? 's' : '')
+                                    React.createElement('div', { className: "flex items-center" },
+                                        React.createElement('button', {
+                                            onClick: () => toggleClient(clientName),
+                                            className: "flex-1 flex items-center justify-between p-4 bg-pearl hover:bg-opacity-70 transition-colors text-left"
+                                        },
+                                            React.createElement('div', { className: "flex items-center gap-2" },
+                                                React.createElement(Building),
+                                                React.createElement('span', { className: "font-semibold text-eggplant" }, clientName)
                                             ),
-                                            React.createElement('span', { className: "text-sm text-eggplant" },
-                                                expandedClients[clientName] ? '▼' : '▶'
+                                            React.createElement('div', { className: "flex items-center gap-3" },
+                                                React.createElement('span', { className: "text-sm text-gray-600" },
+                                                    Object.keys(clientProjects).length + " project" + (Object.keys(clientProjects).length !== 1 ? 's' : '')
+                                                ),
+                                                React.createElement('span', { className: "text-sm text-eggplant" },
+                                                    expandedClients[clientName] ? '▼' : '▶'
+                                                )
                                             )
-                                        )
+                                        ),
+                                        React.createElement('button', {
+                                            onClick: (e) => {
+                                                e.stopPropagation();
+                                                deleteAllByClient(clientName);
+                                            },
+                                            className: "p-4 text-gray-400 hover:text-eggplant transition-colors",
+                                            title: "Delete all projects for this client"
+                                        }, React.createElement(Trash2))
                                     ),
                                     expandedClients[clientName] && React.createElement('div', { className: "p-2 bg-white space-y-2" },
                                         Object.entries(clientProjects).map(([projectName, projectTasks]) =>
                                             React.createElement('div', { key: clientName + "-" + projectName, className: "border border-soft-gray rounded-subtle overflow-hidden" },
-                                                React.createElement('button', {
-                                                    onClick: () => toggleProject(clientName, projectName),
-                                                    className: "w-full flex items-center justify-between p-3 bg-off-white hover:bg-soft-gray transition-colors text-left"
-                                                },
-                                                    React.createElement('div', { className: "flex items-center gap-2" },
-                                                        React.createElement(Folder),
-                                                        React.createElement('span', { className: "font-medium text-deep-green" }, projectName)
-                                                    ),
-                                                    React.createElement('div', { className: "flex items-center gap-2" },
-                                                        React.createElement('span', { className: "text-sm text-gray-600" },
-                                                            Object.keys(projectTasks).length + " task" + (Object.keys(projectTasks).length !== 1 ? 's' : '')
+                                                React.createElement('div', { className: "flex items-center" },
+                                                    React.createElement('button', {
+                                                        onClick: () => toggleProject(clientName, projectName),
+                                                        className: "flex-1 flex items-center justify-between p-3 bg-off-white hover:bg-soft-gray transition-colors text-left"
+                                                    },
+                                                        React.createElement('div', { className: "flex items-center gap-2" },
+                                                            React.createElement(Folder),
+                                                            React.createElement('span', { className: "font-medium text-deep-green" }, projectName)
                                                         ),
-                                                        React.createElement('span', { className: "text-sm text-deep-green" },
-                                                            expandedProjects[clientName + "::" + projectName] ? '▼' : '▶'
+                                                        React.createElement('div', { className: "flex items-center gap-2" },
+                                                            React.createElement('span', { className: "text-sm text-gray-600" },
+                                                                Object.keys(projectTasks).length + " task" + (Object.keys(projectTasks).length !== 1 ? 's' : '')
+                                                            ),
+                                                            React.createElement('span', { className: "text-sm text-deep-green" },
+                                                                expandedProjects[clientName + "::" + projectName] ? '▼' : '▶'
+                                                            )
                                                         )
-                                                    )
+                                                    ),
+                                                    React.createElement('button', {
+                                                        onClick: (e) => {
+                                                            e.stopPropagation();
+                                                            deleteAllByProject(clientName, projectName);
+                                                        },
+                                                        className: "p-3 text-gray-400 hover:text-deep-green transition-colors",
+                                                        title: "Delete all codes for this project"
+                                                    }, React.createElement(Trash2))
                                                 ),
                                                 expandedProjects[clientName + "::" + projectName] && React.createElement('div', { className: "p-2 bg-white space-y-2" },
                                                     Object.entries(projectTasks).map(([taskCode, subtasks]) =>
@@ -1909,11 +2203,72 @@
                             onClick: () => setShowSetup(false),
                             className: "px-10 py-4 bg-deep-green text-white text-base font-semibold rounded-subtle hover:bg-opacity-90 transition-all shadow-md"
                         }, "Start Tracking")
+                    ),
+                    // Notification Toast for Manage Projects page
+                    activeNotification && React.createElement('div', {
+                        className: "fixed bottom-4 right-4 z-50"
+                    },
+                        React.createElement('div', {
+                            className: "bg-white border-l-4 rounded-subtle shadow-xl p-4 max-w-sm flex items-start gap-3 " + (activeNotification.type === 'success' ? "border-deep-green" : "border-eggplant")
+                        },
+                            React.createElement('div', { className: "flex-1" },
+                                React.createElement('p', { className: "text-sm text-gray-800" }, activeNotification.message)
+                            ),
+                            React.createElement('button', {
+                                onClick: () => setActiveNotification(null),
+                                className: "text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none"
+                            }, "×")
+                        )
                     )
                 );
             }
 
             return React.createElement('div', { className: "max-w-7xl mx-auto px-8 py-8 min-h-screen" },
+                // Update notification banner
+                (updateAvailable || updateDownloaded) && React.createElement('div', {
+                    className: "sticky top-0 z-50 mb-6 bg-blue-50 border-2 border-blue-400 rounded-subtle shadow-md"
+                },
+                    React.createElement('div', { className: "p-4 flex items-center justify-between gap-4" },
+                        React.createElement('div', { className: "flex items-center gap-3" },
+                            React.createElement(Download),
+                            React.createElement('div', null,
+                                React.createElement('div', { className: "text-sm font-semibold text-blue-900" },
+                                    updateDownloaded ? 'Update Ready to Install' : 'Update Available'
+                                ),
+                                React.createElement('div', { className: "text-xs text-blue-700" },
+                                    updateDownloaded
+                                        ? 'A new version has been downloaded and is ready to install. Click "Restart & Update" to update.'
+                                        : updateInfo ? `Version ${updateInfo.version} is available. Click "Download" to update.` : 'A new version is available.'
+                                ),
+                                isDownloading && downloadProgress > 0 && React.createElement('div', { className: "mt-2" },
+                                    React.createElement('div', { className: "w-64 bg-gray-200 rounded-full h-2" },
+                                        React.createElement('div', {
+                                            className: "bg-blue-600 h-2 rounded-full transition-all",
+                                            style: { width: `${downloadProgress}%` }
+                                        })
+                                    ),
+                                    React.createElement('div', { className: "text-xs text-blue-600 mt-1" },
+                                        `Downloading... ${Math.round(downloadProgress)}%`
+                                    )
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: "flex items-center gap-2" },
+                            !updateDownloaded && !isDownloading && React.createElement('button', {
+                                onClick: handleDownloadUpdate,
+                                className: "px-4 py-2 text-sm bg-blue-600 text-white rounded-subtle hover:bg-blue-700 transition-colors font-medium"
+                            }, "Download Update"),
+                            updateDownloaded && React.createElement('button', {
+                                onClick: handleInstallUpdate,
+                                className: "px-4 py-2 text-sm bg-blue-600 text-white rounded-subtle hover:bg-blue-700 transition-colors font-medium"
+                            }, "Restart & Update"),
+                            React.createElement('button', {
+                                onClick: handleDismissUpdate,
+                                className: "px-3 py-2 text-sm border border-blue-300 text-blue-700 rounded-subtle hover:bg-blue-100 transition-colors"
+                            }, "Later")
+                        )
+                    )
+                ),
                 isTracking && currentSession && React.createElement('div', { className: "sticky top-0 z-50 mb-6 bg-white border-2 border-deep-green rounded-subtle shadow-md" },
                     React.createElement('div', { className: "p-3 flex items-center justify-between gap-4" },
                         React.createElement('div', { className: "flex items-center gap-3" },
@@ -2510,7 +2865,7 @@
                 ),
                 // Notification Toast
                 activeNotification && React.createElement('div', {
-                    className: "fixed top-4 right-4 z-50 animate-slide-in"
+                    className: "fixed bottom-4 right-4 z-50"
                 },
                     React.createElement('div', {
                         className: "bg-white border-l-4 rounded-subtle shadow-xl p-4 max-w-sm flex items-start gap-3 " + (activeNotification.type === 'success' ? "border-deep-green" : "border-eggplant")
@@ -2530,18 +2885,138 @@
                     onClick: cancelEditEntry
                 },
                     React.createElement('div', {
-                        className: "bg-white rounded-subtle shadow-xl p-6 max-w-md w-full mx-4",
+                        className: "bg-white rounded-subtle shadow-xl p-4 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto",
                         onClick: (e) => e.stopPropagation()
                     },
-                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant mb-4" }, "Edit Time Entry"),
-                        React.createElement('div', { className: "space-y-4" },
+                        React.createElement('h3', { className: "text-base font-semibold text-eggplant mb-3" }, "Edit Time Entry"),
+                        React.createElement('div', { className: "space-y-3" },
+                            React.createElement('div', { className: "bg-soft-gray p-3 rounded-subtle space-y-2" },
+                                React.createElement('h4', { className: "text-xs font-semibold text-eggplant mb-1" }, "Project Selection"),
+                                React.createElement('div', { className: "grid grid-cols-2 gap-2" },
+                                React.createElement('div', null,
+                                    React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "1. Client Name"),
+                                    React.createElement('select', {
+                                        value: (() => {
+                                            const project = projectCodes.find(p => p.id === editFormData.projectId);
+                                            return project ? project.clientName : '';
+                                        })(),
+                                        onChange: (e) => {
+                                            const clientName = e.target.value;
+                                            if (clientName) {
+                                                // Find first project for this client
+                                                const firstProject = projectCodes.find(p => p.clientName === clientName);
+                                                if (firstProject) {
+                                                    setEditFormData({ ...editFormData, projectId: firstProject.id });
+                                                }
+                                            }
+                                        },
+                                        className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green bg-white"
+                                    },
+                                        React.createElement('option', { value: '' }, "Select client..."),
+                                        [...new Set(projectCodes.map(p => p.clientName))].sort().map(client =>
+                                            React.createElement('option', { key: client, value: client }, client)
+                                        )
+                                    )
+                                ),
+                                (() => {
+                                    const currentProject = projectCodes.find(p => p.id === editFormData.projectId);
+                                    if (!currentProject) return null;
+
+                                    const availableProjects = projectCodes.filter(p => p.clientName === currentProject.clientName);
+                                    const uniqueProjectNames = [...new Set(availableProjects.map(p => p.projectName))];
+
+                                    return React.createElement('div', null,
+                                        React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "2. Project/Admin Name"),
+                                        React.createElement('select', {
+                                            value: currentProject.projectName,
+                                            onChange: (e) => {
+                                                const projectName = e.target.value;
+                                                const firstMatch = projectCodes.find(p =>
+                                                    p.clientName === currentProject.clientName &&
+                                                    p.projectName === projectName
+                                                );
+                                                if (firstMatch) {
+                                                    setEditFormData({ ...editFormData, projectId: firstMatch.id });
+                                                }
+                                            },
+                                            className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green bg-white"
+                                        },
+                                            uniqueProjectNames.map(projName =>
+                                                React.createElement('option', { key: projName, value: projName }, projName)
+                                            )
+                                        )
+                                    );
+                                })(),
+                                (() => {
+                                    const currentProject = projectCodes.find(p => p.id === editFormData.projectId);
+                                    if (!currentProject) return null;
+
+                                    const availableTasks = projectCodes.filter(p =>
+                                        p.clientName === currentProject.clientName &&
+                                        p.projectName === currentProject.projectName
+                                    );
+                                    const uniqueTasks = [...new Set(availableTasks.map(p => p.taskCode))];
+
+                                    return React.createElement('div', null,
+                                        React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "3. Task"),
+                                        React.createElement('select', {
+                                            value: currentProject.taskCode,
+                                            onChange: (e) => {
+                                                const taskCode = e.target.value;
+                                                const firstMatch = projectCodes.find(p =>
+                                                    p.clientName === currentProject.clientName &&
+                                                    p.projectName === currentProject.projectName &&
+                                                    p.taskCode === taskCode
+                                                );
+                                                if (firstMatch) {
+                                                    setEditFormData({ ...editFormData, projectId: firstMatch.id });
+                                                }
+                                            },
+                                            className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green bg-white"
+                                        },
+                                            uniqueTasks.map(task =>
+                                                React.createElement('option', { key: task, value: task }, task)
+                                            )
+                                        )
+                                    );
+                                })(),
+                                (() => {
+                                    const currentProject = projectCodes.find(p => p.id === editFormData.projectId);
+                                    if (!currentProject) return null;
+
+                                    const availableSubtasks = projectCodes.filter(p =>
+                                        p.clientName === currentProject.clientName &&
+                                        p.projectName === currentProject.projectName &&
+                                        p.taskCode === currentProject.taskCode
+                                    );
+
+                                    return React.createElement('div', null,
+                                        React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "4. Subtask"),
+                                        React.createElement('select', {
+                                            value: editFormData.projectId,
+                                            onChange: (e) => {
+                                                setEditFormData({ ...editFormData, projectId: parseInt(e.target.value) });
+                                            },
+                                            className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green bg-white"
+                                        },
+                                            availableSubtasks.map(proj =>
+                                                React.createElement('option', { key: proj.id, value: proj.id },
+                                                    proj.subtaskCode + ' (' + proj.code + ')'
+                                                )
+                                            )
+                                        )
+                                    );
+                                })()
+                                )
+                            ),
+                            React.createElement('div', { className: "grid grid-cols-2 gap-2" },
                             React.createElement('div', null,
                                 React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "Date"),
                                 React.createElement('input', {
                                     type: "date",
                                     value: editFormData.date || '',
                                     onChange: (e) => setEditFormData({ ...editFormData, date: e.target.value }),
-                                    className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                    className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
                                 })
                             ),
                             React.createElement('div', null,
@@ -2551,18 +3026,71 @@
                                     step: "1",
                                     value: editFormData.startTime || '',
                                     onChange: (e) => setEditFormData({ ...editFormData, startTime: e.target.value }),
-                                    className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                    className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
                                 })
+                            )
                             ),
                             React.createElement('div', null,
                                 React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "End Time"),
-                                React.createElement('input', {
-                                    type: "time",
-                                    step: "1",
-                                    value: editFormData.endTime || '',
-                                    onChange: (e) => setEditFormData({ ...editFormData, endTime: e.target.value }),
-                                    className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
-                                })
+                                React.createElement('div', { className: "space-y-1.5" },
+                                    React.createElement('input', {
+                                        type: "time",
+                                        step: "1",
+                                        value: editFormData.endTime || '',
+                                        onChange: (e) => setEditFormData({ ...editFormData, endTime: e.target.value }),
+                                        className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                    }),
+                                    editFormData.startTime && React.createElement('div', {
+                                        className: "border border-soft-gray rounded p-1.5 max-h-32 overflow-y-auto bg-white"
+                                    },
+                                        React.createElement('div', { className: "grid grid-cols-6 gap-1.5" },
+                                            (() => {
+                                                // Generate preset time options in 15-minute increments up to 8 hours
+                                                const parseTime = (timeStr) => {
+                                                    const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+                                                    return (hours * 60 + minutes) + (seconds || 0) / 60;
+                                                };
+
+                                                const formatMinutesToTime = (totalMinutes) => {
+                                                    const hours = Math.floor(totalMinutes / 60);
+                                                    const minutes = Math.floor(totalMinutes % 60);
+                                                    const seconds = Math.floor(((totalMinutes % 60) - minutes) * 60);
+                                                    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                                                };
+
+                                                const formatDuration = (minutes) => {
+                                                    if (minutes < 60) return minutes + ' min';
+                                                    const hours = minutes / 60;
+                                                    if (Number.isInteger(hours)) return hours + ' hour' + (hours !== 1 ? 's' : '');
+                                                    return hours.toFixed(2) + ' hours';
+                                                };
+
+                                                const startMinutes = parseTime(editFormData.startTime);
+
+                                                // Generate all 15-minute increments from 15 minutes to 8 hours (480 minutes)
+                                                const presets = [];
+                                                for (let i = 15; i <= 480; i += 15) {
+                                                    presets.push(i);
+                                                }
+
+                                                return presets.map(duration => {
+                                                    const endMinutes = startMinutes + duration;
+                                                    const endTime = formatMinutesToTime(endMinutes);
+                                                    const isSelected = editFormData.endTime === endTime;
+
+                                                    return React.createElement('button', {
+                                                        key: duration,
+                                                        type: 'button',
+                                                        onClick: () => setEditFormData({ ...editFormData, endTime: endTime }),
+                                                        className: "px-1.5 py-1 text-xs border rounded transition-all whitespace-nowrap " + (isSelected
+                                                            ? "bg-deep-green text-white border-deep-green font-semibold"
+                                                            : "border-soft-gray hover:border-deep-green hover:bg-soft-gray")
+                                                    }, formatDuration(duration));
+                                                });
+                                            })()
+                                        )
+                                    )
+                                )
                             ),
                             React.createElement('div', null,
                                 React.createElement('label', { className: "block text-xs font-semibold text-gray-700 mb-1" }, "Comment"),
@@ -2571,18 +3099,18 @@
                                     value: editFormData.comment || '',
                                     onChange: (e) => setEditFormData({ ...editFormData, comment: e.target.value }),
                                     placeholder: "Add comment (optional)...",
-                                    className: "w-full px-3 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                    className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
                                 })
                             )
                         ),
-                        React.createElement('div', { className: "flex items-center justify-end gap-3 mt-6" },
+                        React.createElement('div', { className: "flex items-center justify-end gap-2 mt-3 pt-3 border-t border-soft-gray" },
                             React.createElement('button', {
                                 onClick: cancelEditEntry,
-                                className: "px-4 py-2 text-sm border border-soft-gray rounded-subtle hover:border-gray-400 transition-colors"
+                                className: "px-3 py-1.5 text-sm border border-soft-gray rounded-subtle hover:border-gray-400 transition-colors"
                             }, "Cancel"),
                             React.createElement('button', {
                                 onClick: saveEditEntry,
-                                className: "px-4 py-2 text-sm bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-colors"
+                                className: "px-3 py-1.5 text-sm bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-colors"
                             }, "Save Changes")
                         )
                     )

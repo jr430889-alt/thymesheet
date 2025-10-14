@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 
@@ -90,6 +91,52 @@ ipcMain.handle('import-data', async () => {
 
 ipcMain.handle('get-data-location', () => {
   return userDataPath;
+});
+
+// Auto-updater configuration
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+
+// Auto-updater event handlers
+autoUpdater.on('checking-for-update', () => {
+  console.log('Checking for updates...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('Update available:', info);
+  mainWindow.webContents.send('update-available', info);
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('Update not available:', info);
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('Error in auto-updater:', err);
+  mainWindow.webContents.send('update-error', err.message);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  console.log('Download progress:', progressObj);
+  mainWindow.webContents.send('download-progress', progressObj);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded:', info);
+  mainWindow.webContents.send('update-downloaded', info);
+});
+
+// IPC handlers for update actions
+ipcMain.handle('download-update', () => {
+  autoUpdater.downloadUpdate();
+});
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall(false, true);
+});
+
+ipcMain.handle('check-for-updates', () => {
+  autoUpdater.checkForUpdates();
 });
 
 function createWindow() {
@@ -260,7 +307,7 @@ function createWindow() {
   Menu.setApplicationMenu(menu);
 
   // Uncomment the line below to open DevTools for debugging
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
 
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
@@ -321,6 +368,11 @@ function createTray() {
 app.whenReady().then(() => {
   createWindow();
   createTray();
+
+  // Check for updates when app starts (after a short delay to let window load)
+  setTimeout(() => {
+    autoUpdater.checkForUpdates();
+  }, 3000);
 
   // Register global hotkeys
   const ret = globalShortcut.register('CommandOrControl+Shift+Z', () => {

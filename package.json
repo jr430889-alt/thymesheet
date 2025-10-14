@@ -8,7 +8,8 @@
     "start": "electron .",
     "build": "electron-builder",
     "build-win": "electron-builder --win --x64",
-    "dist": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64"
+    "dist": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64",
+    "publish-release": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64 --publish always"
   },
   "build": {
     "appId": "com.jeremy.thymesheet",
@@ -23,13 +24,34 @@
       "package.json"
     ],
     "win": {
-      "target": ["portable"],
-      "icon": "icon-hq.ico",
-      "sign": false
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon-hq.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ThymeSheet"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "docrocket-mad",
+      "repo": "Jeremys-time-tracker"
     }
   },
   "devDependencies": {
     "electron": "^32.0.0",
     "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
   }
 }
