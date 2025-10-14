@@ -44,7 +44,13 @@
       "Bash(setup-auto-save.bat)",
       "Bash(schtasks:*)",
       "Read(//c/Users/jerem/OneDrive/Documents/ThymeSheet/**)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(git rm:*)",
+      "Bash(timeout:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(awk:*)",
+      "Bash(sort:*)",
+      "Bash(git filter-branch:*)"
     ],
     "deny": [],
     "ask": []
