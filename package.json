@@ -43,7 +43,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "docrocket-mad",
+      "owner": "jr430889-alt",
       "repo": "Jeremys-time-tracker"
     }
   },
