@@ -44,7 +44,7 @@
     "publish": {
       "provider": "github",
       "owner": "jr430889-alt",
-      "repo": "Jeremys-time-tracker"
+      "repo": "thymesheet"
     }
   },
   "devDependencies": {
