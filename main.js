@@ -297,6 +297,7 @@ autoUpdater.on('update-available', (info) => {
 
 autoUpdater.on('update-not-available', (info) => {
   console.log('Update not available:', info);
+  mainWindow.webContents.send('update-not-available', info);
 });
 
 autoUpdater.on('error', (err) => {
@@ -490,6 +491,13 @@ function createWindow() {
         },
         { type: 'separator' },
         {
+          label: 'Check for Updates...',
+          click: () => {
+            mainWindow.webContents.send('manual-check-for-updates');
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'About ThymeSheet',
           click: () => {
             const { dialog } = require('electron');
@@ -497,7 +505,7 @@ function createWindow() {
               type: 'info',
               title: 'About ThymeSheet',
               message: 'ThymeSheet',
-              detail: 'A professional time tracking application\n\nVersion 2.0'
+              detail: 'A professional time tracking application\n\nVersion 2.0.4'
             });
           }
         }

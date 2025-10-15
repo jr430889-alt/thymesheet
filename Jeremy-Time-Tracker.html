@@ -363,6 +363,10 @@
             const [licenseError, setLicenseError] = useState('');
             const [checkingLicense, setCheckingLicense] = useState(true);
 
+            // Manual update check state
+            const [updateCheckMessage, setUpdateCheckMessage] = useState('');
+            const [showUpdateCheckModal, setShowUpdateCheckModal] = useState(false);
+
             // Notification settings
             const [fullDayNotificationEnabled, setFullDayNotificationEnabled] = useState(true);
             const [hourlyBreakNotificationEnabled, setHourlyBreakNotificationEnabled] = useState(true);
@@ -957,6 +961,7 @@
                     console.log('Update available:', info);
                     setUpdateAvailable(true);
                     setUpdateInfo(info);
+                    setShowUpdateCheckModal(false); // Close manual check modal if open
                 };
 
                 const handleDownloadProgress = (event, progressObj) => {
@@ -985,12 +990,26 @@
                 };
                 ipcRenderer.on('show-feedback', handleShowFeedback);
 
+                const handleManualCheckForUpdates = async () => {
+                    setUpdateCheckMessage('Checking for updates...');
+                    setShowUpdateCheckModal(true);
+                    await ipcRenderer.invoke('check-for-updates');
+                };
+                ipcRenderer.on('manual-check-for-updates', handleManualCheckForUpdates);
+
+                const handleUpdateNotAvailable = () => {
+                    setUpdateCheckMessage('You are already running the latest version!');
+                };
+                ipcRenderer.on('update-not-available', handleUpdateNotAvailable);
+
                 return () => {
                     ipcRenderer.removeListener('update-available', handleUpdateAvailable);
                     ipcRenderer.removeListener('download-progress', handleDownloadProgress);
                     ipcRenderer.removeListener('update-downloaded', handleUpdateDownloaded);
                     ipcRenderer.removeListener('update-error', handleUpdateError);
                     ipcRenderer.removeListener('show-feedback', handleShowFeedback);
+                    ipcRenderer.removeListener('manual-check-for-updates', handleManualCheckForUpdates);
+                    ipcRenderer.removeListener('update-not-available', handleUpdateNotAvailable);
                 };
             }, []);
 
@@ -1776,7 +1795,10 @@
                             onClick: (e) => e.stopPropagation()
                         },
                             React.createElement('div', { className: "flex justify-between items-center mb-6" },
-                                React.createElement('h2', { className: "text-2xl font-bold text-eggplant" }, "Settings"),
+                                React.createElement('div', null,
+                                    React.createElement('h2', { className: "text-2xl font-bold text-eggplant" }, "Settings"),
+                                    React.createElement('p', { className: "text-xs text-gray-500 mt-1" }, "ThymeSheet v2.0.4")
+                                ),
                                 React.createElement('button', {
                                     onClick: () => setShowSettingsMenu(false),
                                     className: "text-gray-400 hover:text-eggplant text-2xl"
@@ -1977,6 +1999,33 @@
                                         className: "px-6 py-2 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     }, "Send Feedback")
                                 )
+                            )
+                        )
+                    ),
+
+                    showUpdateCheckModal && React.createElement('div', {
+                        className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
+                        onClick: () => setShowUpdateCheckModal(false)
+                    },
+                        React.createElement('div', {
+                            className: "bg-white rounded-subtle p-8 max-w-md w-full mx-4",
+                            onClick: (e) => e.stopPropagation()
+                        },
+                            React.createElement('div', { className: "flex justify-between items-center mb-6" },
+                                React.createElement('h2', { className: "text-2xl font-bold text-deep-green" }, "Check for Updates"),
+                                React.createElement('button', {
+                                    onClick: () => setShowUpdateCheckModal(false),
+                                    className: "text-gray-400 hover:text-deep-green text-2xl"
+                                }, "×")
+                            ),
+                            React.createElement('div', { className: "text-center py-4" },
+                                React.createElement('p', { className: "text-gray-700" }, updateCheckMessage)
+                            ),
+                            React.createElement('div', { className: "flex justify-end pt-4" },
+                                React.createElement('button', {
+                                    onClick: () => setShowUpdateCheckModal(false),
+                                    className: "px-6 py-2 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-colors"
+                                }, "Close")
                             )
                         )
                     ),
@@ -2699,7 +2748,10 @@
                         onClick: (e) => e.stopPropagation()
                     },
                         React.createElement('div', { className: "flex justify-between items-center mb-6" },
-                            React.createElement('h2', { className: "text-2xl font-bold text-eggplant" }, "Settings"),
+                            React.createElement('div', null,
+                                React.createElement('h2', { className: "text-2xl font-bold text-eggplant" }, "Settings"),
+                                React.createElement('p', { className: "text-xs text-gray-500 mt-1" }, "ThymeSheet v2.0.3")
+                            ),
                             React.createElement('button', {
                                 onClick: () => setShowSettingsMenu(false),
                                 className: "text-gray-400 hover:text-eggplant text-2xl"
