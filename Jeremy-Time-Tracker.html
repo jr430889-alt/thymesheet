@@ -151,6 +151,17 @@
             strokeLinejoin: 'round'
         }, React.createElement('circle', { cx: '12', cy: '12', r: '3' }), React.createElement('path', { d: 'M12 1v6m0 6v6m5.657-13.657l-4.243 4.243m-2.828 2.828l-4.243 4.243M23 12h-6m-6 0H1m18.364-5.657l-4.243 4.243m-2.828 2.828l-4.243 4.243' }));
 
+        const MessageSquare = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('path', { d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' }));
+
         const Building = () => React.createElement('svg', {
             width: '20',
             height: '20',
@@ -346,6 +357,11 @@
             // Update notification state
             const [updateAvailable, setUpdateAvailable] = useState(false);
             const [updateInfo, setUpdateInfo] = useState(null);
+
+            // Feedback modal state
+            const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+            const [feedbackType, setFeedbackType] = useState('suggestion');
+            const [feedbackText, setFeedbackText] = useState('');
             const [downloadProgress, setDownloadProgress] = useState(0);
             const [isDownloading, setIsDownloading] = useState(false);
             const [updateDownloaded, setUpdateDownloaded] = useState(false);
@@ -844,11 +860,17 @@
                 ipcRenderer.on('update-downloaded', handleUpdateDownloaded);
                 ipcRenderer.on('update-error', handleUpdateError);
 
+                const handleShowFeedback = () => {
+                    setShowFeedbackModal(true);
+                };
+                ipcRenderer.on('show-feedback', handleShowFeedback);
+
                 return () => {
                     ipcRenderer.removeListener('update-available', handleUpdateAvailable);
                     ipcRenderer.removeListener('download-progress', handleDownloadProgress);
                     ipcRenderer.removeListener('update-downloaded', handleUpdateDownloaded);
                     ipcRenderer.removeListener('update-error', handleUpdateError);
+                    ipcRenderer.removeListener('show-feedback', handleShowFeedback);
                 };
             }, []);
 
@@ -1529,20 +1551,29 @@
                                     className: "h-16"
                                 })
                             ),
-                            React.createElement('div', { className: "inline-flex bg-soft-gray rounded-full p-1" },
-                                    React.createElement('button', {
-                                        onClick: () => setShowSetup(false),
-                                        className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (!showSetup ? "bg-deep-green text-white" : "text-gray-600 hover:text-gray-800")
-                                    },
-                                        React.createElement(Clock),
-                                        "Track Time"
-                                    ),
+                            React.createElement('div', { className: "flex items-center gap-3" },
                                 React.createElement('button', {
-                                    onClick: () => setShowSetup(true),
-                                    className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (showSetup ? "bg-eggplant text-white" : "text-gray-600 hover:text-gray-800")
+                                    onClick: () => setShowFeedbackModal(true),
+                                    className: "p-2 text-gray-500 hover:text-deep-green hover:bg-soft-gray rounded-full transition-all",
+                                    title: "Send Feedback"
                                 },
-                                    React.createElement(Building),
-                                    "Manage Projects"
+                                    React.createElement(MessageSquare)
+                                ),
+                                React.createElement('div', { className: "inline-flex bg-soft-gray rounded-full p-1" },
+                                        React.createElement('button', {
+                                            onClick: () => setShowSetup(false),
+                                            className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (!showSetup ? "bg-deep-green text-white" : "text-gray-600 hover:text-gray-800")
+                                        },
+                                            React.createElement(Clock),
+                                            "Track Time"
+                                        ),
+                                    React.createElement('button', {
+                                        onClick: () => setShowSetup(true),
+                                        className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (showSetup ? "bg-eggplant text-white" : "text-gray-600 hover:text-gray-800")
+                                    },
+                                        React.createElement(Building),
+                                        "Manage Projects"
+                                    )
                                 )
                             )
                         )
@@ -1680,6 +1711,68 @@
                                         )
                                     ),
                                     React.createElement('p', { className: "text-sm text-gray-600" }, "Get reminded every hour to take a 5-minute break")
+                                )
+                            )
+                        )
+                    ),
+
+                    showFeedbackModal && React.createElement('div', {
+                        className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
+                        onClick: () => setShowFeedbackModal(false)
+                    },
+                        React.createElement('div', {
+                            className: "bg-white rounded-subtle p-8 max-w-lg w-full mx-4",
+                            onClick: (e) => e.stopPropagation()
+                        },
+                            React.createElement('div', { className: "flex justify-between items-center mb-6" },
+                                React.createElement('h2', { className: "text-2xl font-bold text-deep-green" }, "Send Feedback"),
+                                React.createElement('button', {
+                                    onClick: () => setShowFeedbackModal(false),
+                                    className: "text-gray-400 hover:text-deep-green text-2xl"
+                                }, "×")
+                            ),
+                            React.createElement('div', { className: "space-y-4" },
+                                React.createElement('div', null,
+                                    React.createElement('label', { className: "block text-sm font-semibold text-gray-700 mb-2" }, "What type of feedback?"),
+                                    React.createElement('select', {
+                                        value: feedbackType,
+                                        onChange: (e) => setFeedbackType(e.target.value),
+                                        className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                    },
+                                        React.createElement('option', { value: "suggestion" }, "💡 Suggestion"),
+                                        React.createElement('option', { value: "bug" }, "🐛 Bug Report"),
+                                        React.createElement('option', { value: "feature" }, "✨ Feature Request"),
+                                        React.createElement('option', { value: "other" }, "💬 Other")
+                                    )
+                                ),
+                                React.createElement('div', null,
+                                    React.createElement('label', { className: "block text-sm font-semibold text-gray-700 mb-2" }, "Your feedback"),
+                                    React.createElement('textarea', {
+                                        value: feedbackText,
+                                        onChange: (e) => setFeedbackText(e.target.value),
+                                        placeholder: "Tell us what you think...",
+                                        rows: 6,
+                                        className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green resize-none"
+                                    })
+                                ),
+                                React.createElement('div', { className: "flex justify-end gap-3 pt-4" },
+                                    React.createElement('button', {
+                                        onClick: () => setShowFeedbackModal(false),
+                                        className: "px-6 py-2 border border-soft-gray text-gray-700 rounded-subtle hover:bg-soft-gray transition-colors"
+                                    }, "Cancel"),
+                                    React.createElement('button', {
+                                        onClick: () => {
+                                            if (feedbackText.trim()) {
+                                                const feedbackUrl = `https://docs.google.com/forms/d/e/1FAIpQLSeNFOTEUzh4y2cSDU9ndxzLFH066hQZRSZQOoGCSynuTuLI4w/viewform?usp=pp_url&entry.560510887=${encodeURIComponent(feedbackType)}&entry.1928926751=${encodeURIComponent(feedbackText)}`;
+                                                require('electron').shell.openExternal(feedbackUrl);
+                                                setFeedbackText('');
+                                                setShowFeedbackModal(false);
+                                                setActiveNotification({ type: 'success', message: 'Thank you for your feedback!' });
+                                            }
+                                        },
+                                        disabled: !feedbackText.trim(),
+                                        className: "px-6 py-2 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    }, "Send Feedback")
                                 )
                             )
                         )
@@ -2359,20 +2452,29 @@
                                 className: "h-16"
                             })
                         ),
-                        React.createElement('div', { className: "inline-flex bg-soft-gray rounded-full p-1" },
+                        React.createElement('div', { className: "flex items-center gap-3" },
                             React.createElement('button', {
-                                onClick: () => setShowSetup(false),
-                                className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (!showSetup ? "bg-deep-green text-white" : "text-gray-600 hover:text-gray-800")
+                                onClick: () => setShowFeedbackModal(true),
+                                className: "p-2 text-gray-500 hover:text-deep-green hover:bg-soft-gray rounded-full transition-all",
+                                title: "Send Feedback"
                             },
-                                React.createElement(Clock),
-                                "Track Time"
+                                React.createElement(MessageSquare)
                             ),
-                            React.createElement('button', {
-                                onClick: () => setShowSetup(true),
-                                className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (showSetup ? "bg-eggplant text-white" : "text-gray-600 hover:text-gray-800")
-                            },
-                                React.createElement(Building),
-                                "Manage Projects"
+                            React.createElement('div', { className: "inline-flex bg-soft-gray rounded-full p-1" },
+                                React.createElement('button', {
+                                    onClick: () => setShowSetup(false),
+                                    className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (!showSetup ? "bg-deep-green text-white" : "text-gray-600 hover:text-gray-800")
+                                },
+                                    React.createElement(Clock),
+                                    "Track Time"
+                                ),
+                                React.createElement('button', {
+                                    onClick: () => setShowSetup(true),
+                                    className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (showSetup ? "bg-eggplant text-white" : "text-gray-600 hover:text-gray-800")
+                                },
+                                    React.createElement(Building),
+                                    "Manage Projects"
+                                )
                             )
                         )
                     )

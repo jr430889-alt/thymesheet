@@ -288,6 +288,14 @@ function createWindow() {
         },
         { type: 'separator' },
         {
+          label: 'Send Feedback...',
+          accelerator: 'CommandOrControl+Shift+F',
+          click: () => {
+            mainWindow.webContents.send('show-feedback');
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'About ThymeSheet',
           click: () => {
             const { dialog } = require('electron');
