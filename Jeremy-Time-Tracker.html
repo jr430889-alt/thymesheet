@@ -2617,6 +2617,68 @@
                     )
                 ),
 
+                showFeedbackModal && React.createElement('div', {
+                    className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
+                    onClick: () => setShowFeedbackModal(false)
+                },
+                    React.createElement('div', {
+                        className: "bg-white rounded-subtle p-8 max-w-lg w-full mx-4",
+                        onClick: (e) => e.stopPropagation()
+                    },
+                        React.createElement('div', { className: "flex justify-between items-center mb-6" },
+                            React.createElement('h2', { className: "text-2xl font-bold text-deep-green" }, "Send Feedback"),
+                            React.createElement('button', {
+                                onClick: () => setShowFeedbackModal(false),
+                                className: "text-gray-400 hover:text-deep-green text-2xl"
+                            }, "×")
+                        ),
+                        React.createElement('div', { className: "space-y-4" },
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block text-sm font-semibold text-gray-700 mb-2" }, "What type of feedback?"),
+                                React.createElement('select', {
+                                    value: feedbackType,
+                                    onChange: (e) => setFeedbackType(e.target.value),
+                                    className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                },
+                                    React.createElement('option', { value: "suggestion" }, "💡 Suggestion"),
+                                    React.createElement('option', { value: "bug" }, "🐛 Bug Report"),
+                                    React.createElement('option', { value: "feature" }, "✨ Feature Request"),
+                                    React.createElement('option', { value: "other" }, "💬 Other")
+                                )
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block text-sm font-semibold text-gray-700 mb-2" }, "Your feedback"),
+                                React.createElement('textarea', {
+                                    value: feedbackText,
+                                    onChange: (e) => setFeedbackText(e.target.value),
+                                    placeholder: "Tell us what you think...",
+                                    rows: 6,
+                                    className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green resize-none"
+                                })
+                            ),
+                            React.createElement('div', { className: "flex justify-end gap-3 pt-4" },
+                                React.createElement('button', {
+                                    onClick: () => setShowFeedbackModal(false),
+                                    className: "px-6 py-2 border border-soft-gray text-gray-700 rounded-subtle hover:bg-soft-gray transition-colors"
+                                }, "Cancel"),
+                                React.createElement('button', {
+                                    onClick: () => {
+                                        if (feedbackText.trim()) {
+                                            const feedbackUrl = `https://docs.google.com/forms/d/e/1FAIpQLSeNFOTEUzh4y2cSDU9ndxzLFH066hQZRSZQOoGCSynuTuLI4w/viewform?usp=pp_url&entry.560510887=${encodeURIComponent(feedbackType)}&entry.1928926751=${encodeURIComponent(feedbackText)}`;
+                                            require('electron').shell.openExternal(feedbackUrl);
+                                            setFeedbackText('');
+                                            setShowFeedbackModal(false);
+                                            setActiveNotification({ type: 'success', message: 'Thank you for your feedback!' });
+                                        }
+                                    },
+                                    disabled: !feedbackText.trim(),
+                                    className: "px-6 py-2 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                }, "Send Feedback")
+                            )
+                        )
+                    )
+                ),
+
                 storageError && React.createElement('div', { className: "mb-8 p-5 bg-white border-l-4 border-eggplant rounded-subtle shadow-sm" },
                     React.createElement('span', { className: "text-eggplant" }, storageError),
                     React.createElement('button', {

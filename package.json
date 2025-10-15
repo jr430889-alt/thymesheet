@@ -39,7 +39,9 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "ThymeSheet"
+      "shortcutName": "ThymeSheet",
+      "installerIcon": "icon-hq.ico",
+      "uninstallerIcon": "icon-hq.ico"
     },
     "publish": {
       "provider": "github",
