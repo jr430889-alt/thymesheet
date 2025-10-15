@@ -1442,8 +1442,8 @@
             };
 
             if (showSetup) {
-                return React.createElement('div', { className: "max-w-7xl mx-auto px-8 py-8 min-h-screen" },
-                    isTracking && currentSession && React.createElement('div', { className: "sticky top-0 z-50 mb-6 bg-white border-2 border-deep-green rounded-subtle shadow-md" },
+                return React.createElement('div', { className: "min-h-screen" },
+                    isTracking && currentSession && React.createElement('div', { className: "sticky top-0 z-50 mb-6 bg-white border-2 border-deep-green rounded-subtle shadow-md max-w-7xl mx-auto" },
                         React.createElement('div', { className: "p-3 flex items-center justify-between gap-4" },
                             React.createElement('div', { className: "flex items-center gap-3" },
                                 React.createElement('div', { className: "w-2 h-2 bg-deep-green rounded-full animate-pulse" }),
@@ -1520,31 +1520,34 @@
                             })
                         )
                     ),
-                    React.createElement('div', { className: "flex justify-between items-center mb-10 pb-6 border-b border-soft-gray" },
-                        React.createElement('div', { className: "bg-off-white rounded px-2 py-1" },
-                            React.createElement('img', {
-                                src: "logo.png",
-                                alt: "Timesheet Logo",
-                                className: "h-16"
-                            })
-                        ),
-                        React.createElement('div', { className: "inline-flex bg-soft-gray rounded-full p-1" },
+                    React.createElement('div', { className: "sticky top-0 z-40 bg-white border-b border-soft-gray shadow-sm mb-10" },
+                        React.createElement('div', { className: "max-w-7xl mx-auto px-8 flex justify-between items-center py-6" },
+                            React.createElement('div', { className: "bg-white rounded px-2 py-1" },
+                                React.createElement('img', {
+                                    src: "logo.png",
+                                    alt: "Timesheet Logo",
+                                    className: "h-16"
+                                })
+                            ),
+                            React.createElement('div', { className: "inline-flex bg-soft-gray rounded-full p-1" },
+                                    React.createElement('button', {
+                                        onClick: () => setShowSetup(false),
+                                        className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (!showSetup ? "bg-deep-green text-white" : "text-gray-600 hover:text-gray-800")
+                                    },
+                                        React.createElement(Clock),
+                                        "Track Time"
+                                    ),
                                 React.createElement('button', {
-                                    onClick: () => setShowSetup(false),
-                                    className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (!showSetup ? "bg-deep-green text-white" : "text-gray-600 hover:text-gray-800")
+                                    onClick: () => setShowSetup(true),
+                                    className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (showSetup ? "bg-eggplant text-white" : "text-gray-600 hover:text-gray-800")
                                 },
-                                    React.createElement(Clock),
-                                    "Track Time"
-                                ),
-                            React.createElement('button', {
-                                onClick: () => setShowSetup(true),
-                                className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (showSetup ? "bg-eggplant text-white" : "text-gray-600 hover:text-gray-800")
-                            },
-                                React.createElement(Building),
-                                "Manage Projects"
+                                    React.createElement(Building),
+                                    "Manage Projects"
+                                )
                             )
                         )
                     ),
+                    React.createElement('div', { className: "max-w-7xl mx-auto px-8 pb-8" },
 
                     showSettingsMenu && React.createElement('div', {
                         className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
@@ -2203,6 +2206,7 @@
                             onClick: () => setShowSetup(false),
                             className: "px-10 py-4 bg-deep-green text-white text-base font-semibold rounded-subtle hover:bg-opacity-90 transition-all shadow-md"
                         }, "Start Tracking")
+                    )
                     ),
                     // Notification Toast for Manage Projects page
                     activeNotification && React.createElement('div', {
@@ -2223,10 +2227,10 @@
                 );
             }
 
-            return React.createElement('div', { className: "max-w-7xl mx-auto px-8 py-8 min-h-screen" },
+            return React.createElement('div', { className: "min-h-screen" },
                 // Update notification banner
                 (updateAvailable || updateDownloaded) && React.createElement('div', {
-                    className: "sticky top-0 z-50 mb-6 bg-blue-50 border-2 border-blue-400 rounded-subtle shadow-md"
+                    className: "sticky top-0 z-50 mb-6 bg-blue-50 border-2 border-blue-400 rounded-subtle shadow-md max-w-7xl mx-auto"
                 },
                     React.createElement('div', { className: "p-4 flex items-center justify-between gap-4" },
                         React.createElement('div', { className: "flex items-center gap-3" },
@@ -2269,7 +2273,7 @@
                         )
                     )
                 ),
-                isTracking && currentSession && React.createElement('div', { className: "sticky top-0 z-50 mb-6 bg-white border-2 border-deep-green rounded-subtle shadow-md" },
+                isTracking && currentSession && React.createElement('div', { className: "sticky top-0 z-50 mb-6 bg-white border-2 border-deep-green rounded-subtle shadow-md max-w-7xl mx-auto" },
                     React.createElement('div', { className: "p-3 flex items-center justify-between gap-4" },
                         React.createElement('div', { className: "flex items-center gap-3" },
                             React.createElement('div', { className: "w-2 h-2 bg-deep-green rounded-full animate-pulse" }),
@@ -2346,31 +2350,34 @@
                         })
                     )
                 ),
-                React.createElement('div', { className: "flex justify-between items-center mb-10 pb-6 border-b border-soft-gray" },
-                    React.createElement('div', { className: "bg-off-white rounded px-2 py-1" },
-                        React.createElement('img', {
-                            src: "logo.png",
-                            alt: "Timesheet Logo",
-                            className: "h-16"
-                        })
-                    ),
-                    React.createElement('div', { className: "inline-flex bg-soft-gray rounded-full p-1" },
-                        React.createElement('button', {
-                            onClick: () => setShowSetup(false),
-                            className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (!showSetup ? "bg-deep-green text-white" : "text-gray-600 hover:text-gray-800")
-                        },
-                            React.createElement(Clock),
-                            "Track Time"
+                React.createElement('div', { className: "sticky top-0 z-40 bg-white border-b border-soft-gray shadow-sm mb-10" },
+                    React.createElement('div', { className: "max-w-7xl mx-auto px-8 flex justify-between items-center py-6" },
+                        React.createElement('div', { className: "bg-white rounded px-2 py-1" },
+                            React.createElement('img', {
+                                src: "logo.png",
+                                alt: "Timesheet Logo",
+                                className: "h-16"
+                            })
                         ),
-                        React.createElement('button', {
-                            onClick: () => setShowSetup(true),
-                            className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (showSetup ? "bg-eggplant text-white" : "text-gray-600 hover:text-gray-800")
-                        },
-                            React.createElement(Building),
-                            "Manage Projects"
+                        React.createElement('div', { className: "inline-flex bg-soft-gray rounded-full p-1" },
+                            React.createElement('button', {
+                                onClick: () => setShowSetup(false),
+                                className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (!showSetup ? "bg-deep-green text-white" : "text-gray-600 hover:text-gray-800")
+                            },
+                                React.createElement(Clock),
+                                "Track Time"
+                            ),
+                            React.createElement('button', {
+                                onClick: () => setShowSetup(true),
+                                className: "flex items-center gap-2 px-6 py-2 rounded-full transition-all font-medium " + (showSetup ? "bg-eggplant text-white" : "text-gray-600 hover:text-gray-800")
+                            },
+                                React.createElement(Building),
+                                "Manage Projects"
+                            )
                         )
                     )
                 ),
+                React.createElement('div', { className: "max-w-7xl mx-auto px-8 pb-8" },
 
                 showSettingsMenu && React.createElement('div', {
                     className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
@@ -3114,6 +3121,7 @@
                             }, "Save Changes")
                         )
                     )
+                )
                 )
             );
         };
