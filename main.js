@@ -2,6 +2,27 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain, di
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const os = require('os');
+
+// Request single instance lock
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // If we didn't get the lock, another instance is running
+  // Quit this instance immediately
+  app.quit();
+} else {
+  // We got the lock, this is the main instance
+  app.on('second-instance', () => {
+    // Someone tried to run a second instance, focus our window instead
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
 
 let mainWindow;
 let tray;
@@ -9,11 +30,178 @@ let tray;
 // Data storage path - survives uninstall/reinstall
 const userDataPath = path.join(app.getPath('documents'), 'ThymeSheet');
 const dataFilePath = path.join(userDataPath, 'thymesheet-data.json');
+const licenseFilePath = path.join(userDataPath, '.thymesheet-license');
 
 // Ensure data directory exists
 if (!fs.existsSync(userDataPath)) {
   fs.mkdirSync(userDataPath, { recursive: true });
 }
+
+// Get hardware ID for license binding
+function getHardwareId() {
+  const networkInterfaces = os.networkInterfaces();
+  let macAddress = '';
+
+  // Get the first non-internal MAC address
+  for (const name of Object.keys(networkInterfaces)) {
+    for (const iface of networkInterfaces[name]) {
+      if (!iface.internal && iface.mac && iface.mac !== '00:00:00:00:00:00') {
+        macAddress = iface.mac;
+        break;
+      }
+    }
+    if (macAddress) break;
+  }
+
+  // Combine MAC address with OS info for more uniqueness
+  const hwString = `${macAddress}-${os.platform()}-${os.hostname()}`;
+  return crypto.createHash('sha256').update(hwString).digest('hex');
+}
+
+// Secret for license key validation (obfuscated)
+// IMPORTANT: Change this to your own secret phrase before distribution!
+const LICENSE_SECRET = Buffer.from('VGh5bWVTaGVldFNlY3JldEtleTIwMjQh', 'base64').toString('utf8');
+
+// Cryptographic license key validation
+function validateLicenseKeyFormat(licenseKey) {
+  // Expected format: THYME-XXXX-XXXX-XXXX
+  const parts = licenseKey.split('-');
+
+  if (parts.length !== 4 || parts[0] !== 'THYME') {
+    return false;
+  }
+
+  // Each part should be 4 characters (alphanumeric)
+  for (let i = 1; i < 4; i++) {
+    if (parts[i].length !== 4 || !/^[A-Z0-9]+$/.test(parts[i])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function verifyLicenseKey(licenseKey) {
+  if (!validateLicenseKeyFormat(licenseKey)) {
+    return false;
+  }
+
+  const parts = licenseKey.split('-');
+  const part1 = parts[1];
+  const part2 = parts[2];
+  const checksum = parts[3];
+
+  // Calculate expected checksum
+  const data = LICENSE_SECRET + part1 + part2;
+  const hash = crypto.createHash('sha256').update(data).digest('hex');
+  const expectedChecksum = hash.substring(0, 4).toUpperCase();
+
+  return checksum === expectedChecksum;
+}
+
+// Validate and activate license
+function validateAndActivateLicense(licenseKey) {
+  // Check if key format and checksum are valid
+  if (!verifyLicenseKey(licenseKey)) {
+    return { valid: false, error: 'Invalid license key' };
+  }
+
+  const hardwareId = getHardwareId();
+
+  // Check if license file exists
+  if (fs.existsSync(licenseFilePath)) {
+    try {
+      const licenseData = JSON.parse(fs.readFileSync(licenseFilePath, 'utf8'));
+
+      // Check if this hardware already has a license
+      if (licenseData.hardwareId === hardwareId) {
+        // Same computer, license is valid
+        return { valid: true };
+      } else {
+        // Different computer, check if it's the same key
+        if (licenseData.licenseKey === licenseKey) {
+          return { valid: false, error: 'This license key has already been activated on another computer' };
+        }
+      }
+    } catch (error) {
+      console.error('Error reading license file:', error);
+    }
+  }
+
+  // New activation - bind license to this hardware
+  const licenseData = {
+    licenseKey: licenseKey,
+    hardwareId: hardwareId,
+    activatedAt: new Date().toISOString()
+  };
+
+  try {
+    fs.writeFileSync(licenseFilePath, JSON.stringify(licenseData, null, 2));
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: 'Failed to activate license' };
+  }
+}
+
+// Check if license is valid
+function checkLicense() {
+  if (!fs.existsSync(licenseFilePath)) {
+    return { valid: false };
+  }
+
+  try {
+    const licenseData = JSON.parse(fs.readFileSync(licenseFilePath, 'utf8'));
+    const hardwareId = getHardwareId();
+
+    // Verify hardware ID matches and key is valid
+    if (licenseData.hardwareId === hardwareId && verifyLicenseKey(licenseData.licenseKey)) {
+      return { valid: true };
+    } else {
+      return { valid: false, error: 'License is not valid for this computer' };
+    }
+  } catch (error) {
+    return { valid: false, error: 'License file is corrupted' };
+  }
+}
+
+// Get a random key from the embedded key pool
+function getKeyFromPool() {
+  try {
+    const keyPoolPath = path.join(__dirname, 'license-key-pool.json');
+
+    if (!fs.existsSync(keyPoolPath)) {
+      return { success: false, error: 'Key pool not found' };
+    }
+
+    const keyPool = JSON.parse(fs.readFileSync(keyPoolPath, 'utf8'));
+
+    if (!keyPool.keys || keyPool.keys.length === 0) {
+      return { success: false, error: 'No keys available in pool' };
+    }
+
+    // Pick a random key from the pool
+    const randomIndex = Math.floor(Math.random() * keyPool.keys.length);
+    const selectedKey = keyPool.keys[randomIndex];
+
+    return { success: true, key: selectedKey };
+  } catch (error) {
+    console.error('Error reading key pool:', error);
+    return { success: false, error: 'Failed to read key pool' };
+  }
+}
+
+// IPC Handlers for license operations
+ipcMain.handle('check-license', () => {
+  return checkLicense();
+});
+
+ipcMain.handle('get-key-from-pool', () => {
+  return getKeyFromPool();
+});
+
+ipcMain.handle('activate-license', (_event, licenseKey) => {
+  return validateAndActivateLicense(licenseKey);
+});
 
 // IPC Handlers for data operations
 ipcMain.handle('load-data', () => {
@@ -256,13 +444,19 @@ function createWindow() {
           }
         },
         {
-          label: 'Compact Mode',
+          label: 'Daily Goal',
           click: () => {
             mainWindow.webContents.send('open-settings');
           }
         },
         {
-          label: 'Daily Goal',
+          label: 'Daily Progress',
+          click: () => {
+            mainWindow.webContents.send('open-settings');
+          }
+        },
+        {
+          label: 'Time Summary Widget',
           click: () => {
             mainWindow.webContents.send('open-settings');
           }
@@ -315,7 +509,7 @@ function createWindow() {
   Menu.setApplicationMenu(menu);
 
   // Uncomment the line below to open DevTools for debugging
-  mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {

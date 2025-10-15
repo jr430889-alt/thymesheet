@@ -162,6 +162,17 @@
             strokeLinejoin: 'round'
         }, React.createElement('path', { d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' }));
 
+        const ChevronDown = () => React.createElement('svg', {
+            width: '16',
+            height: '16',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('polyline', { points: '6 9 12 15 18 9' }));
+
         const Building = () => React.createElement('svg', {
             width: '20',
             height: '20',
@@ -338,10 +349,19 @@
             const [timeRounding, setTimeRounding] = useState('none');
             const [autoPauseEnabled, setAutoPauseEnabled] = useState(false);
             const [autoPauseMinutes, setAutoPauseMinutes] = useState(15);
-            const [compactMode, setCompactMode] = useState(false);
             const [dailyGoalEnabled, setDailyGoalEnabled] = useState(false);
             const [dailyGoalHours, setDailyGoalHours] = useState(8);
             const [lastActivityTime, setLastActivityTime] = useState(Date.now());
+            const [dailyProgressEnabled, setDailyProgressEnabled] = useState(true);
+            const [timeSummaryEnabled, setTimeSummaryEnabled] = useState(true);
+            const [timeSummaryExpanded, setTimeSummaryExpanded] = useState(true);
+            const [shortcutsExpanded, setShortcutsExpanded] = useState(false);
+
+            // License activation state
+            const [isLicensed, setIsLicensed] = useState(false);
+            const [licenseKey, setLicenseKey] = useState('');
+            const [licenseError, setLicenseError] = useState('');
+            const [checkingLicense, setCheckingLicense] = useState(true);
 
             // Notification settings
             const [fullDayNotificationEnabled, setFullDayNotificationEnabled] = useState(true);
@@ -366,6 +386,9 @@
             const [isDownloading, setIsDownloading] = useState(false);
             const [updateDownloaded, setUpdateDownloaded] = useState(false);
 
+            // Time entries search state
+            const [timeEntriesSearchTerm, setTimeEntriesSearchTerm] = useState('');
+
             // Search and hierarchy state
             const [projectSearchTerm, setProjectSearchTerm] = useState('');
             const [expandedClients, setExpandedClients] = useState({});
@@ -384,8 +407,57 @@
             const [selectedTaskCode, setSelectedTaskCode] = useState('');
             const [selectedSubtaskCode, setSelectedSubtaskCode] = useState('');
 
+            // Check license on startup and auto-activate if needed
+            useEffect(() => {
+                const checkLicenseStatus = async () => {
+                    try {
+                        const result = await ipcRenderer.invoke('check-license');
+
+                        if (result.valid) {
+                            // Already licensed
+                            setIsLicensed(true);
+                            setCheckingLicense(false);
+                        } else {
+                            // Not licensed - try to get a key from the pool and auto-activate
+                            try {
+                                const keyResult = await ipcRenderer.invoke('get-key-from-pool');
+
+                                if (keyResult.success && keyResult.key) {
+                                    // Auto-activate with the pool key
+                                    const activationResult = await ipcRenderer.invoke('activate-license', keyResult.key);
+
+                                    if (activationResult.valid) {
+                                        setIsLicensed(true);
+                                        setLicenseKey(keyResult.key);
+                                    } else {
+                                        // Activation failed - show manual entry screen
+                                        setLicenseError(activationResult.error || 'Auto-activation failed');
+                                    }
+                                } else {
+                                    // No keys in pool - show manual entry screen
+                                    setLicenseError('Please enter a valid license key');
+                                }
+                            } catch (poolError) {
+                                console.error('Error getting key from pool:', poolError);
+                                setLicenseError('Please enter a valid license key');
+                            }
+
+                            setCheckingLicense(false);
+                        }
+                    } catch (error) {
+                        console.error('Error checking license:', error);
+                        setIsLicensed(false);
+                        setCheckingLicense(false);
+                    }
+                };
+
+                checkLicenseStatus();
+            }, []);
+
             // Load data from file system
             useEffect(() => {
+                if (!isLicensed) return; // Don't load data until licensed
+
                 const loadData = async () => {
                     try {
                         const data = await loadDataFromFile();
@@ -416,13 +488,15 @@
                             setTimeRounding(settings.timeRounding || 'none');
                             setAutoPauseEnabled(settings.autoPauseEnabled || false);
                             setAutoPauseMinutes(settings.autoPauseMinutes || 15);
-                            setCompactMode(settings.compactMode || false);
                             setDailyGoalEnabled(settings.dailyGoalEnabled || false);
                             setDailyGoalHours(settings.dailyGoalHours || 8);
                             setFullDayNotificationEnabled(settings.fullDayNotificationEnabled !== undefined ? settings.fullDayNotificationEnabled : true);
                             setHourlyBreakNotificationEnabled(settings.hourlyBreakNotificationEnabled !== undefined ? settings.hourlyBreakNotificationEnabled : true);
                             setLastFullDayNotification(settings.lastFullDayNotification || null);
                             setLastHourlyNotification(settings.lastHourlyNotification || null);
+                            setDailyProgressEnabled(settings.dailyProgressEnabled !== undefined ? settings.dailyProgressEnabled : true);
+                            setTimeSummaryEnabled(settings.timeSummaryEnabled !== undefined ? settings.timeSummaryEnabled : true);
+                            setTimeSummaryExpanded(settings.timeSummaryExpanded !== undefined ? settings.timeSummaryExpanded : true);
                         }
 
                         // Restore active session if it exists
@@ -444,7 +518,7 @@
                 };
 
                 loadData();
-            }, []);
+            }, [isLicensed]);
 
             // Save all data to file whenever anything changes
             useEffect(() => {
@@ -454,13 +528,15 @@
                             timeRounding,
                             autoPauseEnabled,
                             autoPauseMinutes,
-                            compactMode,
                             dailyGoalEnabled,
                             dailyGoalHours,
                             fullDayNotificationEnabled,
                             hourlyBreakNotificationEnabled,
                             lastFullDayNotification,
-                            lastHourlyNotification
+                            lastHourlyNotification,
+                            dailyProgressEnabled,
+                            timeSummaryEnabled,
+                            timeSummaryExpanded
                         };
 
                         // Save current session info if tracking
@@ -486,7 +562,7 @@
                 // Debounce saves to avoid too many writes
                 const timeoutId = setTimeout(saveData, 500);
                 return () => clearTimeout(timeoutId);
-            }, [projectCodes, timeEntries, recentProjects, linkedCSVPath, timeRounding, autoPauseEnabled, autoPauseMinutes, compactMode, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, lastFullDayNotification, lastHourlyNotification, isTracking, currentSession, elapsedTime, currentComment]);
+            }, [projectCodes, timeEntries, recentProjects, linkedCSVPath, timeRounding, autoPauseEnabled, autoPauseMinutes, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, lastFullDayNotification, lastHourlyNotification, dailyProgressEnabled, timeSummaryEnabled, timeSummaryExpanded, isTracking, currentSession, elapsedTime, currentComment]);
 
             // Activity tracking for auto-pause
             useEffect(() => {
@@ -556,19 +632,20 @@
             // Keyboard shortcuts for recent projects (1-9), Enter to start, Space to pause
             useEffect(() => {
                 const handleKeyPress = (e) => {
-                    // Only trigger if not typing in an input/textarea and on Track Time page
-                    if (showSetup || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
-                        return;
+                    const key = e.key;
+                    const isInputField = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT';
+
+                    // Enter key - Start tracking selected project (works everywhere including input fields)
+                    if (key === 'Enter' && !showSetup) {
+                        if (!isTracking && selectedProject) {
+                            e.preventDefault();
+                            startTracking();
+                            return;
+                        }
                     }
 
-                    const key = e.key;
-
-                    // Enter key - Start tracking selected project
-                    if (key === 'Enter') {
-                        e.preventDefault();
-                        if (!isTracking && selectedProject) {
-                            startTracking();
-                        }
+                    // Only trigger other shortcuts if not typing in an input/textarea and on Track Time page
+                    if (showSetup || isInputField) {
                         return;
                     }
 
@@ -662,6 +739,49 @@
                 if (isTracking && currentSession && currentSession.date === today) {
                     const currentHours = elapsedTime / (1000 * 60 * 60);
                     return totalHours + currentHours;
+                }
+                return totalHours;
+            };
+
+            const getThisWeeksTotalHours = () => {
+                const now = new Date();
+                const startOfWeek = new Date(now);
+                startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+                startOfWeek.setHours(0, 0, 0, 0);
+
+                const weekEntries = timeEntries.filter(entry => {
+                    const entryDate = new Date(entry.date);
+                    return entryDate >= startOfWeek;
+                });
+                const totalHours = weekEntries.reduce((sum, entry) => sum + entry.hours, 0);
+
+                if (isTracking && currentSession) {
+                    const sessionDate = new Date(currentSession.date);
+                    if (sessionDate >= startOfWeek) {
+                        const currentHours = elapsedTime / (1000 * 60 * 60);
+                        return totalHours + currentHours;
+                    }
+                }
+                return totalHours;
+            };
+
+            const getThisMonthsTotalHours = () => {
+                const now = new Date();
+                const currentMonth = now.getMonth();
+                const currentYear = now.getFullYear();
+
+                const monthEntries = timeEntries.filter(entry => {
+                    const entryDate = new Date(entry.date);
+                    return entryDate.getMonth() === currentMonth && entryDate.getFullYear() === currentYear;
+                });
+                const totalHours = monthEntries.reduce((sum, entry) => sum + entry.hours, 0);
+
+                if (isTracking && currentSession) {
+                    const sessionDate = new Date(currentSession.date);
+                    if (sessionDate.getMonth() === currentMonth && sessionDate.getFullYear() === currentYear) {
+                        const currentHours = elapsedTime / (1000 * 60 * 60);
+                        return totalHours + currentHours;
+                    }
                 }
                 return totalHours;
             };
@@ -1051,6 +1171,29 @@
                 }));
 
                 cancelEditEntry();
+            };
+
+            const activateLicense = async () => {
+                setLicenseError('');
+                const trimmedKey = licenseKey.trim();
+
+                if (!trimmedKey) {
+                    setLicenseError('Please enter a license key');
+                    return;
+                }
+
+                try {
+                    const result = await ipcRenderer.invoke('activate-license', trimmedKey);
+                    if (result.valid) {
+                        setIsLicensed(true);
+                        setLicenseError('');
+                    } else {
+                        setLicenseError(result.error || 'Invalid license key');
+                    }
+                } catch (error) {
+                    console.error('Error activating license:', error);
+                    setLicenseError('Failed to activate license');
+                }
             };
 
             const showNotification = (message, type = 'info') => {
@@ -1463,6 +1606,50 @@
                 }
             };
 
+            // Show license activation screen if not licensed
+            if (!isLicensed) {
+                if (checkingLicense) {
+                    return React.createElement('div', { className: "min-h-screen bg-off-white flex items-center justify-center" },
+                        React.createElement('div', { className: "text-center" },
+                            React.createElement('div', { className: "text-xl text-eggplant mb-4" }, "Checking license..."),
+                            React.createElement('div', { className: "text-gray-600" }, "Please wait")
+                        )
+                    );
+                }
+
+                return React.createElement('div', { className: "min-h-screen bg-off-white flex items-center justify-center px-4" },
+                    React.createElement('div', { className: "bg-white rounded-lg shadow-xl p-8 max-w-md w-full border-t-4 border-deep-green" },
+                        React.createElement('div', { className: "text-center mb-8" },
+                            React.createElement('h1', { className: "text-3xl font-bold text-eggplant mb-2" }, "ThymeSheet"),
+                            React.createElement('p', { className: "text-gray-600" }, "License Activation Required")
+                        ),
+                        React.createElement('div', { className: "mb-6" },
+                            React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-2" }, "Enter your license key:"),
+                            React.createElement('input', {
+                                type: "text",
+                                value: licenseKey,
+                                onChange: (e) => setLicenseKey(e.target.value),
+                                onKeyPress: (e) => e.key === 'Enter' && activateLicense(),
+                                placeholder: "THYME-XXXX-XXXX-XXXX",
+                                className: "w-full px-4 py-3 border-2 border-soft-gray rounded-lg focus:outline-none focus:border-deep-green text-center font-mono text-lg",
+                                autoFocus: true
+                            })
+                        ),
+                        licenseError && React.createElement('div', { className: "mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm" },
+                            licenseError
+                        ),
+                        React.createElement('button', {
+                            onClick: activateLicense,
+                            className: "w-full bg-deep-green text-white py-3 px-6 rounded-lg font-semibold hover:opacity-90 transition-opacity"
+                        }, "Activate License"),
+                        React.createElement('div', { className: "mt-6 pt-6 border-t border-gray-200" },
+                            React.createElement('p', { className: "text-xs text-gray-500 text-center mb-2" }, "This license key can only be used on one computer."),
+                            React.createElement('p', { className: "text-xs text-gray-500 text-center" }, "Contact support if you need to transfer your license.")
+                        )
+                    )
+                );
+            }
+
             if (showSetup) {
                 return React.createElement('div', { className: "min-h-screen" },
                     isTracking && currentSession && React.createElement('div', { className: "sticky top-0 z-50 mb-6 bg-white border-2 border-deep-green rounded-subtle shadow-md max-w-7xl mx-auto" },
@@ -1543,15 +1730,15 @@
                         )
                     ),
                     React.createElement('div', { className: "sticky top-0 z-40 bg-white border-b border-soft-gray shadow-sm mb-10" },
-                        React.createElement('div', { className: "max-w-7xl mx-auto px-8 flex justify-between items-center py-6" },
-                            React.createElement('div', { className: "bg-white rounded px-2 py-1" },
+                        React.createElement('div', { className: "max-w-7xl mx-auto px-4 sm:px-8 flex flex-wrap justify-between items-center py-4 gap-4" },
+                            React.createElement('div', { className: "bg-white rounded px-2 py-1 flex-shrink-0" },
                                 React.createElement('img', {
                                     src: "logo.png",
                                     alt: "Timesheet Logo",
-                                    className: "h-16"
+                                    className: "h-12 sm:h-16 w-auto"
                                 })
                             ),
-                            React.createElement('div', { className: "flex items-center gap-3" },
+                            React.createElement('div', { className: "flex items-center gap-2 sm:gap-3 flex-wrap" },
                                 React.createElement('button', {
                                     onClick: () => setShowFeedbackModal(true),
                                     className: "p-2 text-gray-500 hover:text-deep-green hover:bg-soft-gray rounded-full transition-all",
@@ -1640,22 +1827,6 @@
 
                                 React.createElement('div', { className: "border-b border-soft-gray pb-6" },
                                     React.createElement('div', { className: "flex items-center justify-between mb-3" },
-                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Compact Mode"),
-                                        React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
-                                            React.createElement('input', {
-                                                type: "checkbox",
-                                                checked: compactMode,
-                                                onChange: (e) => setCompactMode(e.target.checked),
-                                                className: "sr-only peer"
-                                            }),
-                                            React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
-                                        )
-                                    ),
-                                    React.createElement('p', { className: "text-sm text-gray-600" }, "Reduce spacing and use smaller UI elements")
-                                ),
-
-                                React.createElement('div', { className: "pb-6" },
-                                    React.createElement('div', { className: "flex items-center justify-between mb-3" },
                                         React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Daily Goal"),
                                         React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
                                             React.createElement('input', {
@@ -1679,6 +1850,38 @@
                                         }),
                                         React.createElement('span', { className: "text-gray-700" }, "hours per day")
                                     )
+                                ),
+
+                                React.createElement('div', { className: "border-t border-soft-gray pt-6 pb-6" },
+                                    React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Daily Progress"),
+                                        React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                            React.createElement('input', {
+                                                type: "checkbox",
+                                                checked: dailyProgressEnabled,
+                                                onChange: (e) => setDailyProgressEnabled(e.target.checked),
+                                                className: "sr-only peer"
+                                            }),
+                                            React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                        )
+                                    ),
+                                    React.createElement('p', { className: "text-sm text-gray-600" }, "Show progress bar with hours worked today vs daily goal")
+                                ),
+
+                                React.createElement('div', { className: "border-t border-soft-gray pt-6 pb-6" },
+                                    React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Time Summary Widget"),
+                                        React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                            React.createElement('input', {
+                                                type: "checkbox",
+                                                checked: timeSummaryEnabled,
+                                                onChange: (e) => setTimeSummaryEnabled(e.target.checked),
+                                                className: "sr-only peer"
+                                            }),
+                                            React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                        )
+                                    ),
+                                    React.createElement('p', { className: "text-sm text-gray-600" }, "Show daily, weekly, and monthly hour totals on Track Time page")
                                 ),
 
                                 React.createElement('div', { className: "border-t border-soft-gray pt-6 pb-6" },
@@ -1887,10 +2090,6 @@
                                             React.createElement('div', null,
                                                 React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "🎯 Daily Goal"),
                                                 React.createElement('p', null, "Set a target number of hours per day. ThymeSheet shows a live progress bar with your current hours, percentage complete, and hours remaining. Motivating and informative!")
-                                            ),
-                                            React.createElement('div', null,
-                                                React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "📦 Compact Mode"),
-                                                React.createElement('p', null, "Reduces spacing and uses smaller UI elements for a denser interface. Great for smaller screens.")
                                             )
                                         )
                                     )
@@ -1972,36 +2171,46 @@
                         }, "×")
                     ),
 
-                    React.createElement('div', { className: "bg-white border-l-4 border-deep-green rounded-subtle p-8 mb-8 shadow-sm" },
-                        React.createElement('h2', { className: "text-sm font-semibold text-eggplant mb-6 uppercase tracking-wider" }, "Keyboard Shortcuts"),
-                        React.createElement('div', { className: "space-y-4" },
-                            React.createElement('div', null,
-                                React.createElement('h3', { className: "text-xs font-semibold text-deep-green mb-2 uppercase" }, "Global (work anywhere)"),
-                                React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-3" },
-                                    React.createElement('div', { className: "flex items-center gap-3" },
-                                        React.createElement('kbd', { className: "px-3 py-2 bg-soft-gray border border-gray-300 rounded-subtle text-eggplant text-xs font-medium" }, "Ctrl+Shift+Z"),
-                                        React.createElement('span', { className: "text-gray-600 text-sm" }, "Show/Hide window")
-                                    ),
-                                    React.createElement('div', { className: "flex items-center gap-3" },
-                                        React.createElement('kbd', { className: "px-3 py-2 bg-soft-gray border border-gray-300 rounded-subtle text-eggplant text-xs font-medium" }, "Ctrl+Shift+Space"),
-                                        React.createElement('span', { className: "text-gray-600 text-sm" }, "Start/Stop timer")
+                    React.createElement('div', { className: "bg-white border-l-4 border-deep-green rounded-subtle shadow-sm mb-8" },
+                        React.createElement('div', {
+                            className: "flex justify-between items-center p-4 cursor-pointer hover:bg-off-white transition-colors",
+                            onClick: () => setShortcutsExpanded(!shortcutsExpanded)
+                        },
+                            React.createElement('h3', { className: "text-sm font-semibold text-eggplant uppercase tracking-wider" }, "Keyboard Shortcuts"),
+                            React.createElement('div', {
+                                className: "transform transition-transform " + (shortcutsExpanded ? "" : "rotate-180")
+                            }, React.createElement(ChevronDown))
+                        ),
+                        shortcutsExpanded && React.createElement('div', { className: "px-4 pb-4 border-t border-soft-gray pt-4" },
+                            React.createElement('div', { className: "space-y-4" },
+                                React.createElement('div', null,
+                                    React.createElement('h4', { className: "text-xs font-semibold text-deep-green mb-2 uppercase tracking-wide" }, "Global"),
+                                    React.createElement('div', { className: "space-y-1 text-sm" },
+                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
+                                            React.createElement('span', { className: "text-gray-600" }, "Show/Hide window"),
+                                            React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "Ctrl+Shift+Z")
+                                        ),
+                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
+                                            React.createElement('span', { className: "text-gray-600" }, "Start/Stop timer"),
+                                            React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "Ctrl+Shift+Space")
+                                        )
                                     )
-                                )
-                            ),
-                            React.createElement('div', null,
-                                React.createElement('h3', { className: "text-xs font-semibold text-deep-green mb-2 uppercase" }, "Track Time Page"),
-                                React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-3" },
-                                    React.createElement('div', { className: "flex items-center gap-3" },
-                                        React.createElement('kbd', { className: "px-3 py-2 bg-soft-gray border border-gray-300 rounded-subtle text-eggplant text-xs font-medium" }, "1-9"),
-                                        React.createElement('span', { className: "text-gray-600 text-sm" }, "Quick select recent project")
-                                    ),
-                                    React.createElement('div', { className: "flex items-center gap-3" },
-                                        React.createElement('kbd', { className: "px-3 py-2 bg-soft-gray border border-gray-300 rounded-subtle text-eggplant text-xs font-medium" }, "Enter"),
-                                        React.createElement('span', { className: "text-gray-600 text-sm" }, "Start tracking")
-                                    ),
-                                    React.createElement('div', { className: "flex items-center gap-3" },
-                                        React.createElement('kbd', { className: "px-3 py-2 bg-soft-gray border border-gray-300 rounded-subtle text-eggplant text-xs font-medium" }, "Space"),
-                                        React.createElement('span', { className: "text-gray-600 text-sm" }, "Pause/Resume timer")
+                                ),
+                                React.createElement('div', null,
+                                    React.createElement('h4', { className: "text-xs font-semibold text-deep-green mb-2 uppercase tracking-wide" }, "Track Time Page"),
+                                    React.createElement('div', { className: "space-y-1 text-sm" },
+                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
+                                            React.createElement('span', { className: "text-gray-600" }, "Quick select recent project"),
+                                            React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "1-9")
+                                        ),
+                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
+                                            React.createElement('span', { className: "text-gray-600" }, "Start tracking"),
+                                            React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "Enter")
+                                        ),
+                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
+                                            React.createElement('span', { className: "text-gray-600" }, "Pause/Resume timer"),
+                                            React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "Space")
+                                        )
                                     )
                                 )
                             )
@@ -2444,15 +2653,15 @@
                     )
                 ),
                 React.createElement('div', { className: "sticky top-0 z-40 bg-white border-b border-soft-gray shadow-sm mb-10" },
-                    React.createElement('div', { className: "max-w-7xl mx-auto px-8 flex justify-between items-center py-6" },
-                        React.createElement('div', { className: "bg-white rounded px-2 py-1" },
+                    React.createElement('div', { className: "max-w-7xl mx-auto px-4 sm:px-8 flex flex-wrap justify-between items-center py-4 gap-4" },
+                        React.createElement('div', { className: "bg-white rounded px-2 py-1 flex-shrink-0" },
                             React.createElement('img', {
                                 src: "logo.png",
                                 alt: "Timesheet Logo",
-                                className: "h-16"
+                                className: "h-12 sm:h-16 w-auto"
                             })
                         ),
-                        React.createElement('div', { className: "flex items-center gap-3" },
+                        React.createElement('div', { className: "flex items-center gap-2 sm:gap-3 flex-wrap" },
                             React.createElement('button', {
                                 onClick: () => setShowFeedbackModal(true),
                                 className: "p-2 text-gray-500 hover:text-deep-green hover:bg-soft-gray rounded-full transition-all",
@@ -2541,22 +2750,6 @@
 
                             React.createElement('div', { className: "border-b border-soft-gray pb-6" },
                                 React.createElement('div', { className: "flex items-center justify-between mb-3" },
-                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Compact Mode"),
-                                    React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
-                                        React.createElement('input', {
-                                            type: "checkbox",
-                                            checked: compactMode,
-                                            onChange: (e) => setCompactMode(e.target.checked),
-                                            className: "sr-only peer"
-                                        }),
-                                        React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
-                                    )
-                                ),
-                                React.createElement('p', { className: "text-sm text-gray-600" }, "Reduce spacing and use smaller UI elements")
-                            ),
-
-                            React.createElement('div', { className: "pb-6" },
-                                React.createElement('div', { className: "flex items-center justify-between mb-3" },
                                     React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Daily Goal"),
                                     React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
                                         React.createElement('input', {
@@ -2580,6 +2773,38 @@
                                     }),
                                     React.createElement('span', { className: "text-gray-700" }, "hours per day")
                                 )
+                            ),
+
+                            React.createElement('div', { className: "border-t border-soft-gray pt-6 pb-6" },
+                                React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Daily Progress"),
+                                    React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                        React.createElement('input', {
+                                            type: "checkbox",
+                                            checked: dailyProgressEnabled,
+                                            onChange: (e) => setDailyProgressEnabled(e.target.checked),
+                                            className: "sr-only peer"
+                                        }),
+                                        React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                    )
+                                ),
+                                React.createElement('p', { className: "text-sm text-gray-600" }, "Show progress bar with hours worked today vs daily goal")
+                            ),
+
+                            React.createElement('div', { className: "border-t border-soft-gray pt-6 pb-6" },
+                                React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Time Summary Widget"),
+                                    React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                        React.createElement('input', {
+                                            type: "checkbox",
+                                            checked: timeSummaryEnabled,
+                                            onChange: (e) => setTimeSummaryEnabled(e.target.checked),
+                                            className: "sr-only peer"
+                                        }),
+                                        React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                    )
+                                ),
+                                React.createElement('p', { className: "text-sm text-gray-600" }, "Show daily, weekly, and monthly hour totals on Track Time page")
                             ),
 
                             React.createElement('div', { className: "border-t border-soft-gray pt-6 pb-6" },
@@ -2687,7 +2912,7 @@
                     }, "×")
                 ),
 
-                dailyGoalEnabled && (() => {
+                dailyGoalEnabled && dailyProgressEnabled && (() => {
                     const todaysHours = getTodaysTotalHours();
                     const progressPercent = Math.min((todaysHours / dailyGoalHours) * 100, 100);
                     const hoursRemaining = Math.max(0, dailyGoalHours - todaysHours);
@@ -2712,6 +2937,44 @@
                         )
                     );
                 })(),
+
+                // Time Summary Widget
+                timeSummaryEnabled && React.createElement('div', { className: "bg-white border-l-4 border-deep-green rounded-subtle shadow-sm mb-8" },
+                    React.createElement('div', {
+                        className: "flex justify-between items-center p-4 cursor-pointer hover:bg-off-white transition-colors",
+                        onClick: () => setTimeSummaryExpanded(!timeSummaryExpanded)
+                    },
+                        React.createElement('h3', { className: "text-sm font-semibold text-eggplant uppercase tracking-wider" }, "Time Summary"),
+                        React.createElement('div', {
+                            className: "transform transition-transform " + (timeSummaryExpanded ? "" : "rotate-180")
+                        }, React.createElement(ChevronDown))
+                    ),
+                    timeSummaryExpanded && React.createElement('div', { className: "px-4 pb-4 border-t border-soft-gray pt-4" },
+                        React.createElement('div', { className: "grid grid-cols-3 gap-4" },
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs text-gray-600 mb-1" }, "Today"),
+                                React.createElement('div', { className: "text-2xl font-bold font-mono text-deep-green tabular-nums" },
+                                    getTodaysTotalHours().toFixed(1)
+                                ),
+                                React.createElement('div', { className: "text-xs text-gray-500 mt-1" }, "hours")
+                            ),
+                            React.createElement('div', { className: "text-center border-l border-r border-soft-gray" },
+                                React.createElement('div', { className: "text-xs text-gray-600 mb-1" }, "This Week"),
+                                React.createElement('div', { className: "text-2xl font-bold font-mono text-deep-green tabular-nums" },
+                                    getThisWeeksTotalHours().toFixed(1)
+                                ),
+                                React.createElement('div', { className: "text-xs text-gray-500 mt-1" }, "hours")
+                            ),
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs text-gray-600 mb-1" }, "This Month"),
+                                React.createElement('div', { className: "text-2xl font-bold font-mono text-deep-green tabular-nums" },
+                                    getThisMonthsTotalHours().toFixed(1)
+                                ),
+                                React.createElement('div', { className: "text-xs text-gray-500 mt-1" }, "hours")
+                            )
+                        )
+                    )
+                ),
 
                 recentProjects.length > 0 && React.createElement('div', { className: "bg-white border-l-4 border-deep-green rounded-subtle p-6 mb-8 shadow-sm" },
                     React.createElement('div', { className: "flex items-center justify-between mb-4" },
@@ -2753,17 +3016,17 @@
                     )
                 ),
 
-                React.createElement('div', { className: "bg-white border-l-4 border-eggplant rounded-subtle p-8 mb-8 shadow-sm" },
-                    React.createElement('h2', { className: "text-xl font-semibold text-eggplant mb-6" }, "Track Time"),
-                    React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-3 gap-6" },
+                React.createElement('div', { className: "bg-white border-l-4 border-eggplant rounded-subtle p-6 mb-8 shadow-sm" },
+                    React.createElement('h2', { className: "text-lg font-semibold text-eggplant mb-4" }, "Track Time"),
+                    React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-3 gap-4" },
                         React.createElement('div', { className: "lg:col-span-2" },
-                            React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-4 mb-4" },
+                            React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-3 mb-3" },
                                 React.createElement('div', null,
-                                    React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-2" }, "1. Select Client"),
+                                    React.createElement('label', { className: "block text-xs font-medium text-gray-700 mb-1" }, "1. Select Client"),
                                     React.createElement('select', {
                                         value: selectedClient,
                                         onChange: (e) => handleClientChange(e.target.value),
-                                        className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
+                                        className: "w-full px-3 py-2 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
                                         disabled: isTracking
                                     },
                                         React.createElement('option', { value: "" }, "Choose client..."),
@@ -2773,11 +3036,11 @@
                                     )
                                 ),
                                 React.createElement('div', null,
-                                    React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-2" }, "2. Select Project"),
+                                    React.createElement('label', { className: "block text-xs font-medium text-gray-700 mb-1" }, "2. Select Project"),
                                     React.createElement('select', {
                                         value: selectedProjectName,
                                         onChange: (e) => handleProjectNameChange(e.target.value),
-                                        className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
+                                        className: "w-full px-3 py-2 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
                                         disabled: !selectedClient || isTracking
                                     },
                                         React.createElement('option', { value: "" }, "Choose project..."),
@@ -2787,11 +3050,11 @@
                                     )
                                 ),
                                 React.createElement('div', null,
-                                    React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-2" }, "3. Select Task"),
+                                    React.createElement('label', { className: "block text-xs font-medium text-gray-700 mb-1" }, "3. Select Task"),
                                     React.createElement('select', {
                                         value: selectedTaskCode,
                                         onChange: (e) => handleTaskCodeChange(e.target.value),
-                                        className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
+                                        className: "w-full px-3 py-2 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
                                         disabled: !selectedProjectName || isTracking
                                     },
                                         React.createElement('option', { value: "" }, "Choose task..."),
@@ -2801,7 +3064,7 @@
                                     )
                                 ),
                                 React.createElement('div', null,
-                                    React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-2" }, "4. Select Subtask"),
+                                    React.createElement('label', { className: "block text-xs font-medium text-gray-700 mb-1" }, "4. Select Subtask"),
                                     React.createElement('select', {
                                         value: selectedProject,
                                         onChange: (e) => {
@@ -2811,7 +3074,7 @@
                                                 handleSubtaskCodeChange(e.target.value);
                                             }
                                         },
-                                        className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
+                                        className: "w-full px-3 py-2 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800",
                                         disabled: !selectedTaskCode
                                     },
                                         React.createElement('option', { value: "" }, "Choose subtask..."),
@@ -2821,32 +3084,32 @@
                                     )
                                 )
                             ),
-                            React.createElement('div', { className: "mt-4" },
-                                React.createElement('label', { className: "block text-sm font-medium text-eggplant mb-3" }, "Comment (Optional)"),
+                            React.createElement('div', { className: "mt-3" },
+                                React.createElement('label', { className: "block text-xs font-medium text-gray-700 mb-1" }, "Comment (Optional)"),
                                 React.createElement('textarea', {
                                     value: currentComment,
                                     onChange: (e) => setCurrentComment(e.target.value),
                                     placeholder: "Add notes about this time entry...",
-                                    className: "w-full px-4 py-3 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800 resize-none",
-                                    rows: 3
+                                    className: "w-full px-3 py-2 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant bg-white text-gray-800 resize-none",
+                                    rows: 2
                                 })
                             )
                         ),
-                        React.createElement('div', { className: "flex flex-col justify-between" },
-                            React.createElement('div', null,
-                                React.createElement('div', { className: "text-sm text-gray-600 mb-2" }, "Elapsed Time"),
-                                React.createElement('div', { className: "text-4xl font-mono font-bold text-deep-green mb-4 tabular-nums" }, formatTime(elapsedTime))
+                        React.createElement('div', { className: "flex flex-col justify-center items-center bg-pearl rounded-subtle p-4" },
+                            React.createElement('div', { className: "text-center mb-3" },
+                                React.createElement('div', { className: "text-xs text-gray-600 mb-1" }, "Elapsed Time"),
+                                React.createElement('div', { className: "text-3xl font-mono font-bold text-deep-green tabular-nums" }, formatTime(elapsedTime))
                             ),
-                            React.createElement('div', { className: "space-y-2" },
+                            React.createElement('div', { className: "w-full" },
                                 !isTracking ?
                                     React.createElement('button', {
                                         onClick: startTracking,
                                         disabled: !selectedProject,
-                                        className: "w-full px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                        className: "w-full px-5 py-2.5 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-semibold text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
                                     }, "Start Timer") :
                                     React.createElement('button', {
                                         onClick: stopTracking,
-                                        className: "w-full px-6 py-3 bg-eggplant text-white rounded-subtle hover:bg-opacity-90 transition-all font-semibold"
+                                        className: "w-full px-5 py-2.5 bg-eggplant text-white rounded-subtle hover:bg-opacity-90 transition-all font-semibold text-sm"
                                     }, "Stop Timer")
                             )
                         )
@@ -2918,6 +3181,18 @@
                             React.createElement('p', null, "No time entries yet. Start tracking to see your entries here!")
                         ) :
                         React.createElement('div', null,
+                            React.createElement('div', { className: "mb-4" },
+                                React.createElement('input', {
+                                    type: "text",
+                                    value: timeEntriesSearchTerm,
+                                    onChange: (e) => {
+                                        setTimeEntriesSearchTerm(e.target.value);
+                                        setCurrentPage(1);
+                                    },
+                                    placeholder: "Search by client, project, or comment...",
+                                    className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
+                                })
+                            ),
                             React.createElement('div', { className: "overflow-x-auto" },
                                 React.createElement('table', { className: "w-full text-sm" },
                                     React.createElement('thead', null,
@@ -2937,10 +3212,24 @@
                                         (() => {
                                             const entriesPerPage = 10;
                                             const reversedEntries = timeEntries.slice().reverse();
-                                            const totalPages = Math.ceil(reversedEntries.length / entriesPerPage);
+
+                                            // Filter entries based on search term
+                                            const filteredEntries = timeEntriesSearchTerm.trim() === ''
+                                                ? reversedEntries
+                                                : reversedEntries.filter(entry => {
+                                                    const searchLower = timeEntriesSearchTerm.toLowerCase();
+                                                    return (
+                                                        (entry.clientName && entry.clientName.toLowerCase().includes(searchLower)) ||
+                                                        (entry.projectName && entry.projectName.toLowerCase().includes(searchLower)) ||
+                                                        (entry.comment && entry.comment.toLowerCase().includes(searchLower)) ||
+                                                        (entry.projectCode && entry.projectCode.toLowerCase().includes(searchLower))
+                                                    );
+                                                });
+
+                                            const totalPages = Math.ceil(filteredEntries.length / entriesPerPage);
                                             const startIndex = (currentPage - 1) * entriesPerPage;
                                             const endIndex = startIndex + entriesPerPage;
-                                            const currentEntries = reversedEntries.slice(startIndex, endIndex);
+                                            const currentEntries = filteredEntries.slice(startIndex, endIndex);
 
                                             return currentEntries.map((entry) =>
                                                 React.createElement('tr', { key: entry.id, className: "border-b border-soft-gray hover:bg-off-white transition-colors" },
@@ -2975,7 +3264,22 @@
                             // Pagination controls
                             (() => {
                                 const entriesPerPage = 10;
-                                const totalPages = Math.ceil(timeEntries.length / entriesPerPage);
+                                const reversedEntries = timeEntries.slice().reverse();
+
+                                // Filter entries based on search term (same logic as above)
+                                const filteredEntries = timeEntriesSearchTerm.trim() === ''
+                                    ? reversedEntries
+                                    : reversedEntries.filter(entry => {
+                                        const searchLower = timeEntriesSearchTerm.toLowerCase();
+                                        return (
+                                            (entry.clientName && entry.clientName.toLowerCase().includes(searchLower)) ||
+                                            (entry.projectName && entry.projectName.toLowerCase().includes(searchLower)) ||
+                                            (entry.comment && entry.comment.toLowerCase().includes(searchLower)) ||
+                                            (entry.projectCode && entry.projectCode.toLowerCase().includes(searchLower))
+                                        );
+                                    });
+
+                                const totalPages = Math.ceil(filteredEntries.length / entriesPerPage);
 
                                 if (totalPages <= 1) return null;
 
