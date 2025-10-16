@@ -329,10 +329,13 @@ ipcMain.handle('check-for-updates', () => {
 });
 
 function createWindow() {
+  // Load icon as nativeImage for better quality in taskbar
+  const appIcon = nativeImage.createFromPath(path.join(__dirname, 'icon.ico'));
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(__dirname, 'icon.ico'),
+    icon: appIcon,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -533,7 +536,7 @@ function createWindow() {
 
 function createTray() {
   // Load the ThymeSheet tray icon
-  const trayIcon = nativeImage.createFromPath(path.join(__dirname, 'trayimage.ico'));
+  const trayIcon = nativeImage.createFromPath(path.join(__dirname, 'icon.ico'));
   tray = new Tray(trayIcon);
 
   const contextMenu = Menu.buildFromTemplate([
@@ -576,6 +579,11 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
+  // Set App User Model ID for Windows taskbar icon grouping
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.jeremy.thymesheet');
+  }
+
   createWindow();
   createTray();
 
