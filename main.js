@@ -281,6 +281,37 @@ ipcMain.handle('get-data-location', () => {
   return userDataPath;
 });
 
+// Browse CSV file handler
+ipcMain.handle('browse-csv-file', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'CSV Files', extensions: ['csv', 'txt'] }
+      ]
+    });
+
+    if (result.canceled) {
+      return { canceled: true };
+    }
+
+    const filePath = result.filePaths[0];
+    const content = fs.readFileSync(filePath, 'utf8');
+
+    return {
+      success: true,
+      path: filePath,
+      content: content
+    };
+  } catch (error) {
+    console.error('Browse CSV error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
 // Auto-updater configuration
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
