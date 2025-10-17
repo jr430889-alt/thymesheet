@@ -1,6 +1,6 @@
 {
   "name": "thymesheet",
-  "version": "2.1.6",
+  "version": "2.1.7",
   "description": "ThymeSheet - Professional time tracking for consultants",
   "main": "main.js",
   "author": "Jeremy",
@@ -9,7 +9,7 @@
     "build": "electron-builder",
     "build-win": "electron-builder --win --x64",
     "dist": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64",
-    "publish-release": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64 --publish always"
+    "publish": "set GH_TOKEN=%GH_TOKEN% && set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64 --publish always"
   },
   "build": {
     "appId": "com.jeremy.thymesheet",
@@ -44,7 +44,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "ThymeSheet",
       "installerIcon": "icon-hq.ico",
-      "uninstallerIcon": "icon-hq.ico"
+      "uninstallerIcon": "icon-hq.ico",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "publish": {
       "provider": "github",
