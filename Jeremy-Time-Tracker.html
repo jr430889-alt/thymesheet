@@ -482,6 +482,9 @@
 
                         if (data && data.recentProjects) {
                             setRecentProjects(data.recentProjects);
+                        } else {
+                            // Initialize with empty array if not present
+                            setRecentProjects([]);
                         }
 
                         if (data && data.linkedCSVPath) {
@@ -752,17 +755,16 @@
                 const now = new Date();
                 const startOfWeek = new Date(now);
                 startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
-                startOfWeek.setHours(0, 0, 0, 0);
+                const startDateStr = startOfWeek.toISOString().split('T')[0];
 
                 const weekEntries = timeEntries.filter(entry => {
-                    const entryDate = new Date(entry.date);
-                    return entryDate >= startOfWeek;
+                    // String comparison to match export logic exactly
+                    return entry.date >= startDateStr;
                 });
                 const totalHours = weekEntries.reduce((sum, entry) => sum + entry.hours, 0);
 
                 if (isTracking && currentSession) {
-                    const sessionDate = new Date(currentSession.date);
-                    if (sessionDate >= startOfWeek) {
+                    if (currentSession.date >= startDateStr) {
                         const currentHours = elapsedTime / (1000 * 60 * 60);
                         return totalHours + currentHours;
                     }
@@ -772,18 +774,18 @@
 
             const getThisMonthsTotalHours = () => {
                 const now = new Date();
-                const currentMonth = now.getMonth();
-                const currentYear = now.getFullYear();
+                const year = now.getFullYear();
+                const month = now.getMonth() + 1; // 1-12
+                const monthStr = year + '-' + String(month).padStart(2, '0');
 
                 const monthEntries = timeEntries.filter(entry => {
-                    const entryDate = new Date(entry.date);
-                    return entryDate.getMonth() === currentMonth && entryDate.getFullYear() === currentYear;
+                    // String comparison: entry.date is "YYYY-MM-DD", monthStr is "YYYY-MM"
+                    return entry.date && entry.date.startsWith(monthStr);
                 });
                 const totalHours = monthEntries.reduce((sum, entry) => sum + entry.hours, 0);
 
                 if (isTracking && currentSession) {
-                    const sessionDate = new Date(currentSession.date);
-                    if (sessionDate.getMonth() === currentMonth && sessionDate.getFullYear() === currentYear) {
+                    if (currentSession.date && currentSession.date.startsWith(monthStr)) {
                         const currentHours = elapsedTime / (1000 * 60 * 60);
                         return totalHours + currentHours;
                     }
@@ -1690,6 +1692,261 @@
                 a.download = "timesheet-" + (filterStartDate || 'all') + "-" + (filterEndDate || 'dates') + ".csv";
                 a.click();
                 window.URL.revokeObjectURL(url);
+            };
+
+            const exportToExcel = async () => {
+                if (timeEntries.length === 0) {
+                    setStorageError('No entries to export');
+                    return;
+                }
+
+                const filteredEntries = timeEntries.filter(entry => {
+                    let matches = true;
+                    if (filterStartDate && entry.date < filterStartDate) matches = false;
+                    if (filterEndDate && entry.date > filterEndDate) matches = false;
+                    if (filterClient && entry.clientName !== filterClient) matches = false;
+                    if (filterProject && entry.projectName !== filterProject) matches = false;
+                    return matches;
+                });
+
+                if (filteredEntries.length === 0) {
+                    setStorageError('No entries match the filters');
+                    return;
+                }
+
+                try {
+                    const ExcelJS = window.require('exceljs');
+                    const workbook = new ExcelJS.Workbook();
+                    const worksheet = workbook.addWorksheet('Timesheet');
+
+                    // Calculate project summary
+                    const projectSummary = {};
+                    let grandTotal = 0;
+                    filteredEntries.forEach(entry => {
+                        const projectName = entry.projectName;
+                        if (!projectSummary[projectName]) {
+                            projectSummary[projectName] = 0;
+                        }
+                        projectSummary[projectName] += entry.hours;
+                        grandTotal += entry.hours;
+                    });
+
+                    // Convert to array
+                    const projectSummaryArray = Object.entries(projectSummary).map(([project, hours]) => ({
+                        project,
+                        hours
+                    }));
+
+                    // PROJECT SUMMARY TABLE
+                    worksheet.addRow(['PROJECT SUMMARY']);
+                    worksheet.getCell('A1').font = { bold: true, size: 14 };
+                    worksheet.addRow([]);
+
+                    const summaryHeaderRow = worksheet.addRow(['Project Name', 'Total Hours']);
+                    summaryHeaderRow.font = { bold: true };
+                    summaryHeaderRow.eachCell((cell) => {
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FF4A7C59' }
+                        };
+                        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                        cell.border = {
+                            top: { style: 'thin' },
+                            left: { style: 'thin' },
+                            bottom: { style: 'thin' },
+                            right: { style: 'thin' }
+                        };
+                    });
+
+                    projectSummaryArray.forEach(proj => {
+                        const row = worksheet.addRow([proj.project, parseFloat(proj.hours.toFixed(2))]);
+                        row.eachCell((cell) => {
+                            cell.border = {
+                                top: { style: 'thin' },
+                                left: { style: 'thin' },
+                                bottom: { style: 'thin' },
+                                right: { style: 'thin' }
+                            };
+                        });
+                    });
+
+                    const summaryLastRow = 3 + projectSummaryArray.length;
+
+                    // DETAILED TIMESHEET TABLE
+                    const detailStartRow = summaryLastRow + 3;
+                    worksheet.addRow([]);
+                    worksheet.getCell('A' + detailStartRow).value = 'DETAILED TIMESHEET';
+                    worksheet.getCell('A' + detailStartRow).font = { bold: true, size: 14 };
+
+                    worksheet.addRow([]);
+
+                    const detailHeaderRow = worksheet.addRow([
+                        'Week of Month',
+                        'Date',
+                        'Project Name',
+                        'Task Name',
+                        'Subtask Name',
+                        'Hours',
+                        'Comment',
+                        'Daily Total',
+                        'Weekly Total'
+                    ]);
+                    detailHeaderRow.font = { bold: true };
+                    detailHeaderRow.eachCell((cell) => {
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FF4A7C59' }
+                        };
+                        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                        cell.border = {
+                            top: { style: 'thin' },
+                            left: { style: 'thin' },
+                            bottom: { style: 'thin' },
+                            right: { style: 'thin' }
+                        };
+                    });
+
+                    // Sort entries by date
+                    const sortedEntries = [...filteredEntries].sort((a, b) => a.date.localeCompare(b.date));
+
+                    // Calculate daily and weekly totals
+                    const dailyTotals = {};
+                    const weeklyTotals = {};
+                    sortedEntries.forEach(entry => {
+                        // Daily totals
+                        if (!dailyTotals[entry.date]) {
+                            dailyTotals[entry.date] = 0;
+                        }
+                        dailyTotals[entry.date] += entry.hours;
+
+                        // Weekly totals (week starting Sunday)
+                        const entryDate = new Date(entry.date);
+                        const dayOfWeek = entryDate.getDay();
+                        const weekStart = new Date(entryDate);
+                        weekStart.setDate(entryDate.getDate() - dayOfWeek);
+                        const weekKey = weekStart.toISOString().split('T')[0];
+
+                        if (!weeklyTotals[weekKey]) {
+                            weeklyTotals[weekKey] = 0;
+                        }
+                        weeklyTotals[weekKey] += entry.hours;
+                    });
+
+                    // Function to get week of month
+                    const getWeekOfMonth = (dateStr) => {
+                        const date = new Date(dateStr);
+                        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+                        const dayOfWeek = firstDay.getDay();
+                        const offsetDate = date.getDate() + dayOfWeek - 1;
+                        return Math.ceil(offsetDate / 7);
+                    };
+
+                    // Function to get week start date
+                    const getWeekStart = (dateStr) => {
+                        const date = new Date(dateStr);
+                        const dayOfWeek = date.getDay();
+                        const weekStart = new Date(date);
+                        weekStart.setDate(date.getDate() - dayOfWeek);
+                        return weekStart.toISOString().split('T')[0];
+                    };
+
+                    // Add detail rows
+                    let currentWeekStart = null;
+                    let currentDate = null;
+                    sortedEntries.forEach((entry, index) => {
+                        const weekStart = getWeekStart(entry.date);
+                        const isNewWeek = weekStart !== currentWeekStart;
+                        const isNewDay = entry.date !== currentDate;
+
+                        currentWeekStart = weekStart;
+                        currentDate = entry.date;
+
+                        const entryDate = new Date(entry.date);
+                        const weekOfMonth = getWeekOfMonth(entry.date);
+
+                        // Format date as "Month Day, Year"
+                        const formattedDate = entryDate.toLocaleDateString('en-US', {
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric'
+                        });
+
+                        // Check if this is the first entry for this date
+                        const isFirstEntryForDate = index === 0 || sortedEntries[index - 1].date !== entry.date;
+
+                        // Check if this is the first entry for this week
+                        const isFirstEntryForWeek = index === 0 || getWeekStart(sortedEntries[index - 1].date) !== weekStart;
+
+                        // Check if this is the last entry for this week
+                        const isLastEntryForWeek = index === sortedEntries.length - 1 || getWeekStart(sortedEntries[index + 1].date) !== weekStart;
+
+                        const row = worksheet.addRow([
+                            'Week ' + weekOfMonth,
+                            formattedDate,
+                            entry.projectName,
+                            entry.taskCode,
+                            entry.subtaskCode,
+                            parseFloat(entry.hours.toFixed(2)),
+                            entry.comment || '',
+                            isFirstEntryForDate ? parseFloat(dailyTotals[entry.date].toFixed(2)) : '',
+                            isFirstEntryForWeek ? parseFloat(weeklyTotals[weekStart].toFixed(2)) : ''
+                        ]);
+
+                        // Apply borders - bold borders for week boundaries
+                        row.eachCell((cell) => {
+                            cell.border = {
+                                top: { style: isFirstEntryForWeek ? 'medium' : 'thin' },
+                                left: { style: 'thin' },
+                                bottom: { style: isLastEntryForWeek ? 'medium' : 'thin' },
+                                right: { style: 'thin' }
+                            };
+                        });
+                    });
+
+                    // Add grand total row
+                    const grandTotalRow = worksheet.addRow([
+                        '', '', '', '', '', '', '', 'GRAND TOTAL:', parseFloat(grandTotal.toFixed(2))
+                    ]);
+                    grandTotalRow.font = { bold: true };
+                    grandTotalRow.getCell(8).font = { bold: true };
+                    grandTotalRow.getCell(9).font = { bold: true };
+                    grandTotalRow.eachCell((cell) => {
+                        cell.border = {
+                            top: { style: 'thin' },
+                            left: { style: 'thin' },
+                            bottom: { style: 'thin' },
+                            right: { style: 'thin' }
+                        };
+                    });
+
+                    // Auto-fit columns
+                    worksheet.columns.forEach((column) => {
+                        let maxLength = 0;
+                        column.eachCell({ includeEmpty: false }, (cell) => {
+                            const cellValue = cell.value ? cell.value.toString() : '';
+                            if (cellValue.length > maxLength) {
+                                maxLength = cellValue.length;
+                            }
+                        });
+                        column.width = Math.min(Math.max(maxLength + 2, 10), 50);
+                    });
+
+                    // Generate file
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = "timesheet-" + (filterStartDate || 'all') + "-" + (filterEndDate || 'dates') + ".xlsx";
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+
+                } catch (error) {
+                    console.error('Excel export error:', error);
+                    setStorageError('Failed to export to Excel: ' + error.message);
+                }
             };
 
             const getUniqueClients = () => {
@@ -3291,7 +3548,9 @@
                         React.createElement('div', { className: "text-xs text-gray-600 bg-soft-gray px-3 py-1 rounded-subtle" },
                             "Press ",
                             React.createElement('kbd', { className: "px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs font-mono mx-1" }, "1-9"),
-                            " to quick-select"
+                            " then ",
+                            React.createElement('kbd', { className: "px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs font-mono mx-1" }, "Enter"),
+                            " to start"
                         )
                     ),
                     React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3" },
@@ -3474,12 +3733,12 @@
                         )
                     ),
                     React.createElement('button', {
-                        onClick: exportToCSV,
+                        onClick: exportToExcel,
                         disabled: timeEntries.length === 0,
                         className: "w-full flex items-center justify-center gap-2 px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
                     },
                         React.createElement(Download),
-                        "Export to CSV"
+                        "Export to Excel"
                     )
                 ),
 
@@ -3779,7 +4038,7 @@
                                         React.createElement('select', {
                                             value: editFormData.projectId,
                                             onChange: (e) => {
-                                                setEditFormData({ ...editFormData, projectId: parseInt(e.target.value) });
+                                                setEditFormData({ ...editFormData, projectId: Number(e.target.value) });
                                             },
                                             className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green bg-white"
                                         },
