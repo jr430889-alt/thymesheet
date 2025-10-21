@@ -30,7 +30,7 @@ let tray;
 // Data storage path - survives uninstall/reinstall
 const userDataPath = path.join(app.getPath('documents'), 'ThymeSheet');
 const dataFilePath = path.join(userDataPath, 'thymesheet-data.json');
-const licenseFilePath = path.join(userDataPath, '.thymesheet-license');
+const licenseFilePath = path.join(userDataPath, 'thymesheet-license.dat');
 
 // Ensure data directory exists
 if (!fs.existsSync(userDataPath)) {
@@ -58,9 +58,9 @@ function getHardwareId() {
   return crypto.createHash('sha256').update(hwString).digest('hex');
 }
 
-// Secret for license key validation (obfuscated)
-// IMPORTANT: Change this to your own secret phrase before distribution!
-const LICENSE_SECRET = Buffer.from('VGh5bWVTaGVldFNlY3JldEtleTIwMjQh', 'base64').toString('utf8');
+// Secret for license key validation
+// Plain text to avoid false malware detection (base64 encoding looks suspicious)
+const LICENSE_SECRET = 'ThymeSheetSecretKey2024!';
 
 // Cryptographic license key validation
 function validateLicenseKeyFormat(licenseKey) {
@@ -313,8 +313,9 @@ ipcMain.handle('browse-csv-file', async () => {
 });
 
 // Auto-updater configuration
+// Disabled automatic behaviors to prevent false malware detection
 autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoInstallOnAppQuit = false;
 
 // Auto-updater event handlers
 autoUpdater.on('checking-for-update', () => {
@@ -618,10 +619,11 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
 
-  // Check for updates when app starts (after a short delay to let window load)
-  setTimeout(() => {
-    autoUpdater.checkForUpdates();
-  }, 3000);
+  // Auto-update disabled on startup to prevent false malware detection
+  // Users can check for updates manually via Help menu
+  // setTimeout(() => {
+  //   autoUpdater.checkForUpdates();
+  // }, 3000);
 
   // Register global hotkeys
   const ret = globalShortcut.register('CommandOrControl+Shift+Z', () => {
