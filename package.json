@@ -1,6 +1,6 @@
 {
   "name": "thymesheet",
-  "version": "2.1.7",
+  "version": "2.1.8",
   "description": "ThymeSheet - Professional time tracking for consultants",
   "main": "main.js",
   "author": "Jeremy",
@@ -45,7 +45,7 @@
       "shortcutName": "ThymeSheet",
       "installerIcon": "icon-hq.ico",
       "uninstallerIcon": "icon-hq.ico",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.exe"
     },
     "publish": {
       "provider": "github",
