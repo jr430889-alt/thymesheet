@@ -9,7 +9,9 @@
     "build": "electron-builder",
     "build-win": "electron-builder --win --x64",
     "dist": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64",
-    "publish": "set GH_TOKEN=%GH_TOKEN% && set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64 --publish always"
+    "dist-signed": "electron-builder --win --x64",
+    "publish": "set GH_TOKEN=%GH_TOKEN% && set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64 --publish always",
+    "publish-signed": "set GH_TOKEN=%GH_TOKEN% && electron-builder --win --x64 --publish always"
   },
   "build": {
     "appId": "com.jeremy.thymesheet",
@@ -35,7 +37,11 @@
           ]
         }
       ],
-      "icon": "icon-hq.ico"
+      "icon": "icon-hq.ico",
+      "certificateFile": "certs/certificate.pfx",
+      "certificatePassword": "",
+      "signingHashAlgorithms": ["sha256"],
+      "signDlls": true
     },
     "nsis": {
       "oneClick": false,
