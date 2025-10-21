@@ -540,7 +540,7 @@ function createWindow() {
               type: 'info',
               title: 'About ThymeSheet',
               message: 'ThymeSheet',
-              detail: 'A professional time tracking application\n\nVersion 2.1.8'
+              detail: 'A professional time tracking application\n\nVersion 2.1.9'
             });
           }
         }
