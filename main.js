@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const os = require('os');
+const XLSX = require('xlsx');
 
 // Request single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -281,13 +282,13 @@ ipcMain.handle('get-data-location', () => {
   return userDataPath;
 });
 
-// Browse CSV file handler
+// Browse CSV/Excel file handler
 ipcMain.handle('browse-csv-file', async () => {
   try {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
       filters: [
-        { name: 'CSV Files', extensions: ['csv', 'txt'] }
+        { name: 'Spreadsheet Files', extensions: ['csv', 'txt', 'xlsx', 'xls'] }
       ]
     });
 
@@ -296,7 +297,20 @@ ipcMain.handle('browse-csv-file', async () => {
     }
 
     const filePath = result.filePaths[0];
-    const content = fs.readFileSync(filePath, 'utf8');
+    const ext = path.extname(filePath).toLowerCase();
+    let content;
+
+    // Handle Excel files
+    if (ext === '.xlsx' || ext === '.xls') {
+      const workbook = XLSX.readFile(filePath);
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      // Convert to CSV format
+      content = XLSX.utils.sheet_to_csv(worksheet);
+    } else {
+      // Handle CSV/TXT files
+      content = fs.readFileSync(filePath, 'utf8');
+    }
 
     return {
       success: true,
@@ -304,7 +318,7 @@ ipcMain.handle('browse-csv-file', async () => {
       content: content
     };
   } catch (error) {
-    console.error('Browse CSV error:', error);
+    console.error('Browse file error:', error);
     return {
       success: false,
       error: error.message
@@ -540,7 +554,7 @@ function createWindow() {
               type: 'info',
               title: 'About ThymeSheet',
               message: 'ThymeSheet',
-              detail: 'A professional time tracking application\n\nVersion 2.1.9'
+              detail: 'A professional time tracking application\n\nVersion 2.2.0'
             });
           }
         }

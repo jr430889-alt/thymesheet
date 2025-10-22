@@ -1,6 +1,6 @@
 {
   "name": "thymesheet",
-  "version": "2.1.9",
+  "version": "2.2.0",
   "description": "ThymeSheet - Professional time tracking for consultants",
   "main": "main.js",
   "author": "Jeremy",
@@ -37,11 +37,7 @@
           ]
         }
       ],
-      "icon": "icon-hq.ico",
-      "certificateFile": "certs/certificate.pfx",
-      "certificatePassword": "",
-      "signingHashAlgorithms": ["sha256"],
-      "signDlls": true
+      "icon": "icon-hq.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -65,6 +61,7 @@
   },
   "dependencies": {
     "electron-updater": "^6.6.2",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "xlsx": "^0.18.5"
   }
 }
