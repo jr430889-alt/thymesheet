@@ -1,6 +1,6 @@
 {
   "name": "thymesheet",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "ThymeSheet - Professional time tracking for consultants",
   "main": "main.js",
   "author": "Jeremy",
@@ -22,7 +22,9 @@
     "files": [
       "main.js",
       "Jeremy-Time-Tracker.html",
+      "floating-timer.html",
       "logo.png",
+      "icon.png",
       "icon.ico",
       "icon-hq.ico",
       "package.json",

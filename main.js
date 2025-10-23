@@ -26,6 +26,7 @@ if (!gotTheLock) {
 }
 
 let mainWindow;
+let floatingTimerWindow;
 let tray;
 
 // Data storage path - survives uninstall/reinstall
@@ -326,6 +327,100 @@ ipcMain.handle('browse-csv-file', async () => {
   }
 });
 
+// Floating timer window functions
+function createFloatingTimerWindow() {
+  if (floatingTimerWindow) return;
+
+  const {screen} = require('electron');
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const {width, height} = primaryDisplay.workAreaSize;
+
+  floatingTimerWindow = new BrowserWindow({
+    width: 292,
+    height: 140,
+    x: width - 302,
+    y: height - 150,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+
+  floatingTimerWindow.loadFile('floating-timer.html');
+  floatingTimerWindow.setVisibleOnAllWorkspaces(true, {visibleOnFullScreen: true});
+  floatingTimerWindow.setAlwaysOnTop(true, 'floating', 1);
+
+  floatingTimerWindow.on('closed', () => {
+    floatingTimerWindow = null;
+  });
+}
+
+function closeFloatingTimerWindow() {
+  if (floatingTimerWindow) {
+    floatingTimerWindow.close();
+    floatingTimerWindow = null;
+  }
+}
+
+function showFloatingTimerWindow() {
+  if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+    floatingTimerWindow.show();
+  }
+}
+
+function hideFloatingTimerWindow() {
+  if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+    floatingTimerWindow.hide();
+  }
+}
+
+// IPC handlers for floating timer
+let floatingTimerEnabled = false;
+let isMainWindowMinimized = false;
+
+ipcMain.on('toggle-floating-timer', (event, enabled) => {
+  floatingTimerEnabled = enabled;
+  if (!enabled) {
+    closeFloatingTimerWindow();
+  }
+});
+
+ipcMain.on('update-floating-timer', (event, timerData) => {
+  if (floatingTimerEnabled) {
+    // Create window if it doesn't exist
+    if (!floatingTimerWindow || floatingTimerWindow.isDestroyed()) {
+      createFloatingTimerWindow();
+      // Only show if main window is minimized
+      if (!isMainWindowMinimized) {
+        hideFloatingTimerWindow();
+      }
+    }
+
+    // Send data once window is ready
+    if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+      floatingTimerWindow.webContents.send('timer-update', timerData);
+    }
+  } else {
+    // Close window if timer updates come but feature is disabled
+    closeFloatingTimerWindow();
+  }
+});
+
+// Handle minimize button click from floating timer
+ipcMain.on('minimize-floating-timer', () => {
+  hideFloatingTimerWindow();
+});
+
+// Handle close button click from floating timer
+ipcMain.on('close-floating-timer', () => {
+  closeFloatingTimerWindow();
+});
+
 // Auto-updater configuration
 // Disabled automatic behaviors to prevent false malware detection
 autoUpdater.autoDownload = false;
@@ -568,6 +663,28 @@ function createWindow() {
   // Uncomment the line below to open DevTools for debugging
   // mainWindow.webContents.openDevTools();
 
+  // Handle minimize/restore for floating timer
+  mainWindow.on('minimize', () => {
+    isMainWindowMinimized = true;
+    if (floatingTimerEnabled && floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+      showFloatingTimerWindow();
+    }
+  });
+
+  mainWindow.on('restore', () => {
+    isMainWindowMinimized = false;
+    if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+      hideFloatingTimerWindow();
+    }
+  });
+
+  mainWindow.on('show', () => {
+    isMainWindowMinimized = false;
+    if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+      hideFloatingTimerWindow();
+    }
+  });
+
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
       event.preventDefault();
@@ -644,16 +761,25 @@ app.whenReady().then(() => {
     console.log('Hotkey triggered - Window visible:', mainWindow.isVisible(), 'Window focused:', mainWindow.isFocused());
 
     if (mainWindow.isVisible() && mainWindow.isFocused()) {
-      // If window is visible and focused, hide it
-      console.log('Hiding window');
-      mainWindow.hide();
+      // If window is visible and focused, minimize it and show floating timer
+      console.log('Minimizing window');
+      mainWindow.minimize();
+      isMainWindowMinimized = true;
+      if (floatingTimerEnabled && floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+        showFloatingTimerWindow();
+      }
     } else {
-      // If window is hidden or not focused, show and focus it
+      // If window is hidden or not focused, show and focus it, hide floating timer
       console.log('Showing and focusing window');
+      mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
       mainWindow.setAlwaysOnTop(true);
       mainWindow.setAlwaysOnTop(false); // This brings it to front
+      isMainWindowMinimized = false;
+      if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+        hideFloatingTimerWindow();
+      }
     }
   });
 
