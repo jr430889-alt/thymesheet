@@ -336,10 +336,10 @@ function createFloatingTimerWindow() {
   const {width, height} = primaryDisplay.workAreaSize;
 
   floatingTimerWindow = new BrowserWindow({
-    width: 292,
-    height: 140,
-    x: width - 302,
-    y: height - 150,
+    width: 352,
+    height: 135,
+    x: width - 362,
+    y: height - 145,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
