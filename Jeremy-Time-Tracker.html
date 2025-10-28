@@ -713,13 +713,13 @@
 
                 const checkInterval = setInterval(() => {
                     const now = Date.now();
-                    const today = new Date().toISOString().split('T')[0];
+                    const today = getLocalDateString();
 
                     // Check for 8-hour full day notification
                     if (fullDayNotificationEnabled) {
                         const todaysHours = getTodaysTotalHours();
                         if (todaysHours >= 8) {
-                            const lastNotifDate = lastFullDayNotification ? new Date(lastFullDayNotification).toISOString().split('T')[0] : null;
+                            const lastNotifDate = lastFullDayNotification ? getLocalDateString(new Date(lastFullDayNotification)) : null;
                             if (lastNotifDate !== today) {
                                 showNotification("🎉 That's a full day's work! You've hit 8 hours. Time to take a break!", 'success');
                                 setLastFullDayNotification(now);
@@ -745,6 +745,14 @@
                 return () => clearInterval(checkInterval);
             }, [isTracking, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, currentSession, lastFullDayNotification, lastHourlyNotification, timeEntries, elapsedTime]);
 
+            // Helper function to get local date string in YYYY-MM-DD format
+            const getLocalDateString = (date = new Date()) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
             const formatTime = (milliseconds) => {
                 const seconds = Math.floor(milliseconds / 1000);
                 const hours = Math.floor(seconds / 3600);
@@ -754,7 +762,7 @@
             };
 
             const getTodaysTotalHours = () => {
-                const today = new Date().toISOString().split('T')[0];
+                const today = getLocalDateString();
                 const todaysEntries = timeEntries.filter(entry => entry.date === today);
                 const totalHours = todaysEntries.reduce((sum, entry) => sum + entry.hours, 0);
 
@@ -769,7 +777,7 @@
                 const now = new Date();
                 const startOfWeek = new Date(now);
                 startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
-                const startDateStr = startOfWeek.toISOString().split('T')[0];
+                const startDateStr = getLocalDateString(startOfWeek);
 
                 const weekEntries = timeEntries.filter(entry => {
                     // String comparison to match export logic exactly
@@ -819,7 +827,7 @@
             };
 
             const getTodayChartData = () => {
-                const today = new Date().toISOString().split('T')[0];
+                const today = getLocalDateString();
                 const todaysEntries = timeEntries.filter(entry => entry.date === today);
                 const totalHours = todaysEntries.reduce((sum, entry) => sum + entry.hours, 0);
                 const currentHours = (isTracking && currentSession && currentSession.date === today) ? elapsedTime / (1000 * 60 * 60) : 0;
@@ -838,7 +846,7 @@
                 for (let i = 0; i < 7; i++) {
                     const date = new Date(startOfWeek);
                     date.setDate(startOfWeek.getDate() + i);
-                    const dateStr = date.toISOString().split('T')[0];
+                    const dateStr = getLocalDateString(date);
 
                     const dayEntries = timeEntries.filter(entry => entry.date === dateStr);
                     let totalHours = dayEntries.reduce((sum, entry) => sum + entry.hours, 0);
@@ -864,7 +872,7 @@
 
                 for (let day = 1; day <= daysInMonth; day++) {
                     const date = new Date(currentYear, currentMonth, day);
-                    const dateStr = date.toISOString().split('T')[0];
+                    const dateStr = getLocalDateString(date);
                     const weekNum = Math.ceil(day / 7);
 
                     const dayEntries = timeEntries.filter(entry => entry.date === dateStr);
@@ -892,7 +900,7 @@
 
                 let entries = [];
                 if (chartPeriod === 'day') {
-                    const today = new Date().toISOString().split('T')[0];
+                    const today = getLocalDateString();
                     entries = timeEntries.filter(entry => entry.date === today);
                     if (isTracking && currentSession && currentSession.date === today) {
                         entries = [...entries, { ...currentSession, hours: elapsedTime / (1000 * 60 * 60) }];
@@ -1016,7 +1024,7 @@
                     taskCode: project.taskCode,
                     subtaskCode: project.subtaskCode,
                     startTime: Date.now(),
-                    date: new Date().toISOString().split('T')[0]
+                    date: getLocalDateString()
                 };
 
                 setCurrentSession(session);
@@ -1288,7 +1296,7 @@
                     taskCode: project.taskCode,
                     subtaskCode: project.subtaskCode,
                     startTime: Date.now(),
-                    date: new Date().toISOString().split('T')[0]
+                    date: getLocalDateString()
                 };
 
                 console.log('Setting new session:', newSession);
@@ -1316,7 +1324,7 @@
                     if (/^\d{2}:\d{2}(:\d{2})?$/.test(timeStr)) return timeStr;
 
                     // Parse locale time string
-                    const today = new Date().toISOString().split('T')[0];
+                    const today = getLocalDateString();
                     const dateTimeStr = today + ' ' + timeStr;
                     const date = new Date(dateTimeStr);
 
@@ -1865,7 +1873,7 @@
                         const dayOfWeek = entryDate.getDay();
                         const weekStart = new Date(entryDate);
                         weekStart.setDate(entryDate.getDate() - dayOfWeek);
-                        const weekKey = weekStart.toISOString().split('T')[0];
+                        const weekKey = getLocalDateString(weekStart);
 
                         if (!weeklyTotals[weekKey]) {
                             weeklyTotals[weekKey] = 0;
@@ -1888,7 +1896,7 @@
                         const dayOfWeek = date.getDay();
                         const weekStart = new Date(date);
                         weekStart.setDate(date.getDate() - dayOfWeek);
-                        return weekStart.toISOString().split('T')[0];
+                        return getLocalDateString(weekStart);
                     };
 
                     // Add detail rows
