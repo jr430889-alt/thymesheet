@@ -1831,6 +1831,7 @@
                     const detailHeaderRow = worksheet.addRow([
                         'Week of Month',
                         'Date',
+                        'Client Name',
                         'Project Name',
                         'Task Name',
                         'Subtask Name',
@@ -1933,6 +1934,7 @@
                         const row = worksheet.addRow([
                             'Week ' + weekOfMonth,
                             formattedDate,
+                            entry.clientName || '',
                             entry.projectName,
                             entry.taskCode,
                             entry.subtaskCode,
@@ -1955,11 +1957,11 @@
 
                     // Add grand total row
                     const grandTotalRow = worksheet.addRow([
-                        '', '', '', '', '', '', '', 'GRAND TOTAL:', parseFloat(grandTotal.toFixed(2))
+                        '', '', '', '', '', '', '', '', 'GRAND TOTAL:', parseFloat(grandTotal.toFixed(2))
                     ]);
                     grandTotalRow.font = { bold: true };
-                    grandTotalRow.getCell(8).font = { bold: true };
                     grandTotalRow.getCell(9).font = { bold: true };
+                    grandTotalRow.getCell(10).font = { bold: true };
                     grandTotalRow.eachCell((cell) => {
                         cell.border = {
                             top: { style: 'thin' },

@@ -761,9 +761,9 @@ app.whenReady().then(() => {
     console.log('Hotkey triggered - Window visible:', mainWindow.isVisible(), 'Window focused:', mainWindow.isFocused());
 
     if (mainWindow.isVisible() && mainWindow.isFocused()) {
-      // If window is visible and focused, minimize it and show floating timer
-      console.log('Minimizing window');
-      mainWindow.minimize();
+      // If window is visible and focused, hide it completely and show floating timer
+      console.log('Hiding window to show floating timer');
+      mainWindow.hide();
       isMainWindowMinimized = true;
       if (floatingTimerEnabled && floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
         showFloatingTimerWindow();
