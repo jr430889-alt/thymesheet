@@ -23,6 +23,7 @@
       "main.js",
       "Jeremy-Time-Tracker.html",
       "floating-timer.html",
+      "idle-prompt.html",
       "logo.png",
       "icon.png",
       "icon.ico",
@@ -58,7 +59,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^32.0.0",
+    "electron": "^32.3.3",
     "electron-builder": "^25.0.0"
   },
   "dependencies": {

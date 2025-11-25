@@ -1,5 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain, dialog } = require('electron');
-const { autoUpdater } = require('electron-updater');
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain, dialog, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -27,6 +26,7 @@ if (!gotTheLock) {
 
 let mainWindow;
 let floatingTimerWindow;
+let idlePromptWindow;
 let tray;
 
 // Data storage path - survives uninstall/reinstall
@@ -379,6 +379,92 @@ function hideFloatingTimerWindow() {
   }
 }
 
+// Idle prompt window functions
+function createIdlePromptWindow() {
+  if (idlePromptWindow && !idlePromptWindow.isDestroyed()) {
+    idlePromptWindow.focus();
+    return;
+  }
+
+  const {screen} = require('electron');
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const {width, height} = primaryDisplay.workAreaSize;
+
+  idlePromptWindow = new BrowserWindow({
+    width: 400,
+    height: 300,
+    x: width - 420,
+    y: height - 320,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+
+  idlePromptWindow.loadFile('idle-prompt.html');
+
+  idlePromptWindow.on('closed', () => {
+    idlePromptWindow = null;
+  });
+}
+
+function showIdlePrompt(data) {
+  createIdlePromptWindow();
+
+  if (idlePromptWindow && !idlePromptWindow.isDestroyed()) {
+    idlePromptWindow.webContents.once('did-finish-load', () => {
+      idlePromptWindow.webContents.send('idle-prompt-data', data);
+    });
+  }
+}
+
+function closeIdlePromptWindow() {
+  if (idlePromptWindow && !idlePromptWindow.isDestroyed()) {
+    idlePromptWindow.close();
+    idlePromptWindow = null;
+  }
+}
+
+// IPC handlers for idle prompt
+ipcMain.on('show-idle-prompt', (_event, data) => {
+  showIdlePrompt(data);
+});
+
+ipcMain.on('idle-prompt-response', (_event, response, promptType) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('idle-prompt-action', response, promptType);
+  }
+  closeIdlePromptWindow();
+});
+
+// IPC handler to check if main window is visible
+ipcMain.handle('is-main-window-visible', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow.isVisible() && !mainWindow.isMinimized();
+  }
+  return false;
+});
+
+// IPC handler to show and focus main window (for activity reminder)
+ipcMain.on('show-main-window', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.setAlwaysOnTop(true);
+    mainWindow.setAlwaysOnTop(false); // Brings window to front
+    console.log('[MAIN] Main window shown and focused');
+  }
+});
+
 // IPC handlers for floating timer
 let floatingTimerEnabled = false;
 let isMainWindowMinimized = false;
@@ -419,54 +505,6 @@ ipcMain.on('minimize-floating-timer', () => {
 // Handle close button click from floating timer
 ipcMain.on('close-floating-timer', () => {
   closeFloatingTimerWindow();
-});
-
-// Auto-updater configuration
-// Disabled automatic behaviors to prevent false malware detection
-autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = false;
-
-// Auto-updater event handlers
-autoUpdater.on('checking-for-update', () => {
-  console.log('Checking for updates...');
-});
-
-autoUpdater.on('update-available', (info) => {
-  console.log('Update available:', info);
-  mainWindow.webContents.send('update-available', info);
-});
-
-autoUpdater.on('update-not-available', (info) => {
-  console.log('Update not available:', info);
-  mainWindow.webContents.send('update-not-available', info);
-});
-
-autoUpdater.on('error', (err) => {
-  console.error('Error in auto-updater:', err);
-  mainWindow.webContents.send('update-error', err.message);
-});
-
-autoUpdater.on('download-progress', (progressObj) => {
-  console.log('Download progress:', progressObj);
-  mainWindow.webContents.send('download-progress', progressObj);
-});
-
-autoUpdater.on('update-downloaded', (info) => {
-  console.log('Update downloaded:', info);
-  mainWindow.webContents.send('update-downloaded', info);
-});
-
-// IPC handlers for update actions
-ipcMain.handle('download-update', () => {
-  autoUpdater.downloadUpdate();
-});
-
-ipcMain.handle('install-update', () => {
-  autoUpdater.quitAndInstall(false, true);
-});
-
-ipcMain.handle('check-for-updates', () => {
-  autoUpdater.checkForUpdates();
 });
 
 function createWindow() {
@@ -749,6 +787,135 @@ app.whenReady().then(() => {
 
   createWindow();
   createTray();
+
+  // Auto-updater configuration (lazy-loaded after app ready)
+  // Disabled automatic behaviors to prevent false malware detection
+  const { autoUpdater } = require('electron-updater');
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+
+  // Auto-updater event handlers
+  autoUpdater.on('checking-for-update', () => {
+    console.log('Checking for updates...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info);
+    mainWindow.webContents.send('update-available', info);
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('Update not available:', info);
+    mainWindow.webContents.send('update-not-available', info);
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('Error in auto-updater:', err);
+    mainWindow.webContents.send('update-error', err.message);
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    console.log('Download progress:', progressObj);
+    mainWindow.webContents.send('download-progress', progressObj);
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info);
+    mainWindow.webContents.send('update-downloaded', info);
+  });
+
+  // IPC handlers for update actions
+  ipcMain.handle('download-update', () => {
+    autoUpdater.downloadUpdate();
+  });
+
+  ipcMain.handle('install-update', () => {
+    autoUpdater.quitAndInstall(false, true);
+  });
+
+  ipcMain.handle('check-for-updates', () => {
+    autoUpdater.checkForUpdates();
+  });
+
+  // System power monitor for idle detection
+  powerMonitor.on('suspend', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('system-suspend');
+    }
+  });
+
+  powerMonitor.on('resume', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('system-resume');
+    }
+  });
+
+  powerMonitor.on('shutdown', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('system-shutdown');
+    }
+  });
+
+  powerMonitor.on('lock-screen', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('system-lock');
+    }
+  });
+
+  powerMonitor.on('unlock-screen', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('system-unlock');
+    }
+  });
+
+  // IPC handler for getting idle state
+  ipcMain.handle('get-idle-state', () => {
+    return powerMonitor.getSystemIdleState(1);
+  });
+
+  // IPC handler for getting idle time
+  ipcMain.handle('get-idle-time', () => {
+    return powerMonitor.getSystemIdleTime();
+  });
+
+  // Background activity monitoring for tracking reminders
+  let lastActivityReminderTime = null;
+  let isCurrentlyTracking = false;
+  let activityReminderSettings = { enabled: false, reminderInterval: 10 };
+
+  // Listen for tracking state updates from renderer
+  ipcMain.on('tracking-state-update', (_event, data) => {
+    isCurrentlyTracking = data.isTracking;
+    activityReminderSettings.enabled = data.activityReminderEnabled || false;
+    activityReminderSettings.reminderInterval = data.reminderInterval || 10;
+    console.log('[MAIN] Tracking state updated:', {
+      isTracking: isCurrentlyTracking,
+      activityReminderEnabled: activityReminderSettings.enabled,
+      reminderInterval: activityReminderSettings.reminderInterval
+    });
+  });
+
+  // ACTIVITY REMINDER SERVICE: Check for activity every minute when activity reminders are enabled
+  setInterval(() => {
+    if (!activityReminderSettings.enabled || isCurrentlyTracking) return;
+
+    const idleTimeSeconds = powerMonitor.getSystemIdleTime();
+    const idleTimeMinutes = idleTimeSeconds / 60;
+
+    // If user has been active recently (less than 1 minute idle)
+    if (idleTimeMinutes < 1) {
+      const now = Date.now();
+      const timeSinceLastReminder = lastActivityReminderTime ? now - lastActivityReminderTime : Infinity;
+      const reminderIntervalMs = activityReminderSettings.reminderInterval * 60 * 1000;
+
+      // Show reminder if enough time has passed
+      if (timeSinceLastReminder > reminderIntervalMs) {
+        console.log('[MAIN - ACTIVITY REMINDER] User active but not tracking - showing reminder');
+        lastActivityReminderTime = now;
+        showIdlePrompt({ type: 'activity-reminder' });
+      }
+    }
+  }, 60000); // Check every minute
 
   // Auto-update disabled on startup to prevent false malware detection
   // Users can check for updates manually via Help menu

@@ -358,6 +358,21 @@
             const [shortcutsExpanded, setShortcutsExpanded] = useState(false);
             const [chartPeriod, setChartPeriod] = useState('week'); // 'day', 'week', 'month'
 
+            // Idle detection settings (Stop timer when user is idle while tracking)
+            const [idleDetectionEnabled, setIdleDetectionEnabled] = useState(false);
+            const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState(10);
+            const [showIdlePrompt, setShowIdlePrompt] = useState(false);
+            const [idleDuration, setIdleDuration] = useState(0);
+            const [idleStartTime, setIdleStartTime] = useState(null);
+            const [pausedByIdle, setPausedByIdle] = useState(false);
+            const [pausedBySystem, setPausedBySystem] = useState(false);
+
+            // Activity reminder settings (Remind user to start tracking when active but not tracking)
+            const [activityReminderEnabled, setActivityReminderEnabled] = useState(false);
+            const [reminderIntervalMinutes, setReminderIntervalMinutes] = useState(10);
+            const [showTrackingReminder, setShowTrackingReminder] = useState(false);
+            const [lastReminderTime, setLastReminderTime] = useState(null);
+
             // License activation state
             const [isLicensed, setIsLicensed] = useState(false);
             const [licenseKey, setLicenseKey] = useState('');
@@ -401,11 +416,24 @@
             const [expandedProjects, setExpandedProjects] = useState({});
             const [expandedTasks, setExpandedTasks] = useState({});
 
+            // Inline add form state
+            const [showAddTaskForm, setShowAddTaskForm] = useState(null); // stores key like "client::project"
+            const [showAddSubtaskForm, setShowAddSubtaskForm] = useState(null); // stores key like "client::project::task"
+            const [inlineTaskCode, setInlineTaskCode] = useState('');
+            const [inlineSubtaskCode, setInlineSubtaskCode] = useState('');
+
             // CSV filter state
             const [filterStartDate, setFilterStartDate] = useState('');
             const [filterEndDate, setFilterEndDate] = useState('');
             const [filterClient, setFilterClient] = useState('');
             const [filterProject, setFilterProject] = useState('');
+            const [mergeEntries, setMergeEntries] = useState(true); // Merge entries with same date/task/subtask
+
+            // Release to Project Manager state
+            const [showReviewModal, setShowReviewModal] = useState(false);
+            const [reviewEntries, setReviewEntries] = useState([]);
+            const [emailProvider, setEmailProvider] = useState(null); // 'outlook' or 'gmail'
+            const [showProviderSelection, setShowProviderSelection] = useState(false);
 
             // Cascading dropdown state for Track Time
             const [selectedClient, setSelectedClient] = useState('');
@@ -507,6 +535,11 @@
                             setDailyProgressEnabled(settings.dailyProgressEnabled !== undefined ? settings.dailyProgressEnabled : true);
                             setTimeSummaryEnabled(settings.timeSummaryEnabled !== undefined ? settings.timeSummaryEnabled : true);
                             setTimeSummaryExpanded(settings.timeSummaryExpanded !== undefined ? settings.timeSummaryExpanded : true);
+                            setEmailProvider(settings.emailProvider || null);
+                            setIdleDetectionEnabled(settings.idleDetectionEnabled || false);
+                            setIdleTimeoutMinutes(settings.idleTimeoutMinutes || 10);
+                            setActivityReminderEnabled(settings.activityReminderEnabled || false);
+                            setReminderIntervalMinutes(settings.reminderIntervalMinutes || 10);
                         }
 
                         // Restore active session if it exists
@@ -547,7 +580,12 @@
                             lastHourlyNotification,
                             dailyProgressEnabled,
                             timeSummaryEnabled,
-                            timeSummaryExpanded
+                            timeSummaryExpanded,
+                            emailProvider,
+                            idleDetectionEnabled,
+                            idleTimeoutMinutes,
+                            activityReminderEnabled,
+                            reminderIntervalMinutes
                         };
 
                         // Save current session info if tracking
@@ -573,7 +611,7 @@
                 // Debounce saves to avoid too many writes
                 const timeoutId = setTimeout(saveData, 500);
                 return () => clearTimeout(timeoutId);
-            }, [projectCodes, timeEntries, recentProjects, linkedCSVPath, timeRounding, autoPauseEnabled, autoPauseMinutes, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, floatingTimerEnabled, lastFullDayNotification, lastHourlyNotification, dailyProgressEnabled, timeSummaryEnabled, timeSummaryExpanded, isTracking, currentSession, elapsedTime, currentComment]);
+            }, [projectCodes, timeEntries, recentProjects, linkedCSVPath, timeRounding, autoPauseEnabled, autoPauseMinutes, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, floatingTimerEnabled, lastFullDayNotification, lastHourlyNotification, dailyProgressEnabled, timeSummaryEnabled, timeSummaryExpanded, emailProvider, idleDetectionEnabled, idleTimeoutMinutes, activityReminderEnabled, reminderIntervalMinutes, isTracking, currentSession, elapsedTime, currentComment]);
 
             // Activity tracking for auto-pause
             useEffect(() => {
@@ -640,7 +678,7 @@
                 };
             }, [isTracking, currentSession, autoPauseEnabled, autoPauseMinutes, lastActivityTime]);
 
-            // Keyboard shortcuts for recent projects (1-9), Enter to start, Space to pause, Arrow keys to toggle pages
+            // Keyboard shortcuts for recent projects (1-9,0), Enter to start, Space to pause, Arrow keys to toggle pages
             useEffect(() => {
                 const handleKeyPress = (e) => {
                     const key = e.key;
@@ -682,10 +720,10 @@
                         return;
                     }
 
-                    // Number keys 1-9 - Quick select recent projects
-                    if (key >= '1' && key <= '9') {
-                        const index = parseInt(key) - 1;
-                        if (index < recentProjects.length && index < 9) {
+                    // Number keys 1-9 and 0 - Quick select recent projects (0 = 10th project)
+                    if ((key >= '1' && key <= '9') || key === '0') {
+                        const index = key === '0' ? 9 : parseInt(key) - 1;
+                        if (index < recentProjects.length) {
                             const projectId = recentProjects[index];
                             const project = projectCodes.find(p => p.id === projectId);
 
@@ -744,6 +782,208 @@
 
                 return () => clearInterval(checkInterval);
             }, [isTracking, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, currentSession, lastFullDayNotification, lastHourlyNotification, timeEntries, elapsedTime]);
+
+            // Idle detection with Electron powerMonitor
+            useEffect(() => {
+                if (!ipcRenderer || !idleDetectionEnabled) return;
+
+                const checkIdleTime = async () => {
+                    if (!isTracking || !currentSession) return;
+
+                    try {
+                        const idleTimeSeconds = await ipcRenderer.invoke('get-idle-time');
+                        const idleTimeMinutes = idleTimeSeconds / 60;
+
+                        if (idleTimeMinutes >= idleTimeoutMinutes && !pausedByIdle && !showIdlePrompt) {
+                            // User has been idle for the threshold period
+                            const idleMs = idleTimeMinutes * 60 * 1000;
+                            setPausedByIdle(true);
+                            setIdleStartTime(Date.now() - idleMs);
+                            setIdleDuration(idleMs);
+                            setShowIdlePrompt(true);
+
+                            // Pause the timer - the timer useEffect will handle clearing interval
+                            setIsTracking(false);
+
+                            // Show external idle prompt window
+                            if (ipcRenderer) {
+                                ipcRenderer.send('show-idle-prompt', {
+                                    type: 'idle',
+                                    isSystemSleep: false,
+                                    projectCode: currentSession.projectCode,
+                                    idleMinutes: Math.floor(idleTimeMinutes)
+                                });
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error checking idle time:', error);
+                    }
+                };
+
+                // Check idle time every 10 seconds
+                const idleCheckInterval = setInterval(checkIdleTime, 10000);
+
+                return () => clearInterval(idleCheckInterval);
+            }, [ipcRenderer, idleDetectionEnabled, idleTimeoutMinutes, isTracking, currentSession, pausedByIdle, showIdlePrompt]);
+
+            // IDLE DETECTION SERVICE: System event listeners for sleep/wake/shutdown (when tracking)
+            useEffect(() => {
+                if (!ipcRenderer || !idleDetectionEnabled) return;
+
+                const handleSystemSuspend = () => {
+                    if (isTracking && currentSession && !pausedBySystem) {
+                        console.log('[IDLE DETECTION] System suspend detected - pausing timer');
+                        setPausedBySystem(true);
+                        setIdleStartTime(Date.now());
+                        setIsTracking(false);
+                    }
+                };
+
+                const handleSystemResume = () => {
+                    if (pausedBySystem && currentSession) {
+                        const idleMs = Date.now() - (idleStartTime || Date.now());
+                        console.log('[IDLE DETECTION] System resume detected - idle for', Math.floor(idleMs / (1000 * 60)), 'minutes');
+                        setIdleDuration(idleMs);
+                        setShowIdlePrompt(true);
+
+                        // Show external idle prompt window
+                        if (ipcRenderer) {
+                            ipcRenderer.send('show-idle-prompt', {
+                                type: 'idle',
+                                isSystemSleep: true,
+                                projectCode: currentSession.projectCode,
+                                idleMinutes: Math.floor(idleMs / (1000 * 60))
+                            });
+                        }
+                    }
+                };
+
+                const handleSystemShutdown = () => {
+                    if (isTracking && currentSession && !pausedBySystem) {
+                        console.log('[IDLE DETECTION] System shutdown detected - pausing timer');
+                        setPausedBySystem(true);
+                        setIdleStartTime(Date.now());
+                        setIsTracking(false);
+                    }
+                };
+
+                const handleSystemLock = () => {
+                    // Same as suspend for idle detection purposes
+                    if (isTracking && currentSession && !pausedBySystem) {
+                        console.log('[IDLE DETECTION] System lock detected - pausing timer');
+                        setPausedBySystem(true);
+                        setIdleStartTime(Date.now());
+                        setIsTracking(false);
+                    }
+                };
+
+                ipcRenderer.on('system-suspend', handleSystemSuspend);
+                ipcRenderer.on('system-resume', handleSystemResume);
+                ipcRenderer.on('system-shutdown', handleSystemShutdown);
+                ipcRenderer.on('system-lock', handleSystemLock);
+
+                return () => {
+                    ipcRenderer.removeListener('system-suspend', handleSystemSuspend);
+                    ipcRenderer.removeListener('system-resume', handleSystemResume);
+                    ipcRenderer.removeListener('system-shutdown', handleSystemShutdown);
+                    ipcRenderer.removeListener('system-lock', handleSystemLock);
+                };
+            }, [ipcRenderer, idleDetectionEnabled, isTracking, currentSession, pausedBySystem, idleStartTime]);
+
+            // ACTIVITY REMINDER SERVICE: Remind user to start tracking when active but not tracking
+            useEffect(() => {
+                if (!activityReminderEnabled || isTracking) return;
+
+                let lastActivityCheck = Date.now();
+
+                const checkActivity = () => {
+                    // Don't show if already showing
+                    if (showTrackingReminder) return;
+
+                    const now = Date.now();
+                    const timeSinceLastReminder = lastReminderTime ? now - lastReminderTime : Infinity;
+                    const reminderIntervalMs = reminderIntervalMinutes * 60 * 1000;
+
+                    // Show reminder if enough time has passed since last reminder
+                    if (timeSinceLastReminder > reminderIntervalMs) {
+                        console.log('[ACTIVITY REMINDER] Showing reminder - user active but not tracking');
+                        setShowTrackingReminder(true);
+                        setLastReminderTime(now);
+
+                        // Show external activity reminder window
+                        if (ipcRenderer) {
+                            ipcRenderer.send('show-idle-prompt', {
+                                type: 'activity-reminder'
+                            });
+                        }
+                    }
+                };
+
+                // Check on mouse/keyboard activity with debouncing
+                const handleActivity = () => {
+                    const now = Date.now();
+                    const timeSinceLastCheck = now - lastActivityCheck;
+
+                    // Only check once every 2 minutes to avoid spam
+                    if (timeSinceLastCheck > 2 * 60 * 1000) {
+                        lastActivityCheck = now;
+                        checkActivity();
+                    }
+                };
+
+                window.addEventListener('mousemove', handleActivity);
+                window.addEventListener('keydown', handleActivity);
+
+                return () => {
+                    window.removeEventListener('mousemove', handleActivity);
+                    window.removeEventListener('keydown', handleActivity);
+                };
+            }, [activityReminderEnabled, reminderIntervalMinutes, isTracking, showTrackingReminder, lastReminderTime, ipcRenderer]);
+
+            // ACTIVITY REMINDER SERVICE: Show reminder on system unlock (when not tracking)
+            useEffect(() => {
+                if (!ipcRenderer || !activityReminderEnabled) return;
+
+                const handleSystemUnlock = async () => {
+                    // Only show reminder if not tracking
+                    if (!isTracking && !showTrackingReminder) {
+                        const now = Date.now();
+                        const timeSinceLastReminder = lastReminderTime ? now - lastReminderTime : Infinity;
+                        const reminderIntervalMs = reminderIntervalMinutes * 60 * 1000;
+
+                        // Only show reminder if enough time has passed
+                        if (timeSinceLastReminder > reminderIntervalMs) {
+                            setTimeout(async () => {
+                                if (!isTracking) {
+                                    // Check if main window is visible before showing reminder
+                                    const isMainWindowVisible = await ipcRenderer.invoke('is-main-window-visible');
+
+                                    if (!isMainWindowVisible) {
+                                        console.log('[ACTIVITY REMINDER] System unlock - showing tracking reminder');
+                                        setShowTrackingReminder(true);
+                                        setLastReminderTime(now);
+
+                                        // Show external activity reminder window
+                                        if (ipcRenderer) {
+                                            ipcRenderer.send('show-idle-prompt', {
+                                                type: 'activity-reminder'
+                                            });
+                                        }
+                                    } else {
+                                        console.log('[ACTIVITY REMINDER] Main window already visible - skipping reminder');
+                                    }
+                                }
+                            }, 2000); // Wait 2 seconds after unlock
+                        }
+                    }
+                };
+
+                ipcRenderer.on('system-unlock', handleSystemUnlock);
+
+                return () => {
+                    ipcRenderer.removeListener('system-unlock', handleSystemUnlock);
+                };
+            }, [ipcRenderer, activityReminderEnabled, reminderIntervalMinutes, isTracking, showTrackingReminder, lastReminderTime]);
 
             // Helper function to get local date string in YYYY-MM-DD format
             const getLocalDateString = (date = new Date()) => {
@@ -996,13 +1236,230 @@
                 setStorageError(null);
             };
 
+            // Add task inline to an existing project
+            const addInlineTask = (clientName, projectName) => {
+                if (!inlineTaskCode.trim()) {
+                    return;
+                }
+
+                const newProject = {
+                    id: Date.now() + Math.random(),
+                    clientName: clientName,
+                    projectName: projectName,
+                    taskCode: inlineTaskCode.trim().toUpperCase(),
+                    subtaskCode: 'NEW',
+                    code: inlineTaskCode.trim().toUpperCase() + '-NEW'
+                };
+
+                setProjectCodes(prev => [...prev, newProject]);
+                setInlineTaskCode('');
+                setShowAddTaskForm(null);
+                showNotification('Task added successfully! Add subtasks below.', 'success');
+            };
+
+            // Add subtask inline to an existing task
+            const addInlineSubtask = (clientName, projectName, taskCode) => {
+                if (!inlineSubtaskCode.trim()) {
+                    return;
+                }
+
+                const newProject = {
+                    id: Date.now() + Math.random(),
+                    clientName: clientName,
+                    projectName: projectName,
+                    taskCode: taskCode,
+                    subtaskCode: inlineSubtaskCode.trim().toUpperCase(),
+                    code: taskCode + '-' + inlineSubtaskCode.trim().toUpperCase()
+                };
+
+                setProjectCodes(prev => [...prev, newProject]);
+                setInlineSubtaskCode('');
+                setShowAddSubtaskForm(null);
+                showNotification('Subtask added successfully!', 'success');
+            };
+
             const deleteProjectCode = (id) => {
                 setProjectCodes(prev => prev.filter(project => project.id !== id));
             };
 
+            // Release to Project Manager functions
+            const startReleaseWorkflow = () => {
+                if (timeEntries.length === 0) {
+                    setStorageError('No time entries to release');
+                    return;
+                }
+
+                // Filter entries based on current filters
+                const filteredEntries = timeEntries.filter(entry => {
+                    let matches = true;
+                    if (filterStartDate && entry.date < filterStartDate) matches = false;
+                    if (filterEndDate && entry.date > filterEndDate) matches = false;
+                    if (filterClient && entry.clientName !== filterClient) matches = false;
+                    if (filterProject && entry.projectName !== filterProject) matches = false;
+                    return matches;
+                });
+
+                if (filteredEntries.length === 0) {
+                    setStorageError('No entries match the filters');
+                    return;
+                }
+
+                // Set review entries and show the review modal
+                setReviewEntries(filteredEntries.map(entry => ({ ...entry })));
+                setShowReviewModal(true);
+            };
+
+            const updateReviewEntry = (index, field, value) => {
+                setReviewEntries(prev => {
+                    const updated = [...prev];
+                    updated[index][field] = value;
+                    return updated;
+                });
+            };
+
+            const confirmAndCreateEmail = async () => {
+                // Check if email provider is set
+                if (!emailProvider) {
+                    setShowProviderSelection(true);
+                    return;
+                }
+
+                await createEmailDraft();
+            };
+
+            const selectEmailProvider = async (provider) => {
+                setEmailProvider(provider);
+                setShowProviderSelection(false);
+                await createEmailDraft();
+            };
+
+            const createEmailDraft = async () => {
+                try {
+                    // Use the shared workbook generation function with reviewEntries
+                    const workbook = await generateExcelWorkbook(reviewEntries);
+
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+                    // Save to Documents/ThymeSheet folder for reliable access
+                    const fs = window.require('fs');
+                    const path = window.require('path');
+                    const os = window.require('os');
+
+                    // Ensure we have valid date strings for filename
+                    const startDateStr = filterStartDate || new Date().toISOString().split('T')[0];
+                    const endDateStr = filterEndDate || new Date().toISOString().split('T')[0];
+
+                    // Try Documents folder first, then Desktop as fallback
+                    let savePath;
+                    let saveLocation;
+                    const fileName = `Timesheet_${startDateStr}_to_${endDateStr}.xlsx`;
+
+                    // Try Documents/ThymeSheet folder
+                    const documentsPath = path.join(os.homedir(), 'Documents', 'ThymeSheet');
+                    try {
+                        if (!fs.existsSync(documentsPath)) {
+                            fs.mkdirSync(documentsPath, { recursive: true });
+                        }
+                        savePath = path.join(documentsPath, fileName);
+                        saveLocation = 'Documents\\ThymeSheet';
+                    } catch (err) {
+                        // Fallback to Desktop
+                        const desktopPath = path.join(os.homedir(), 'Desktop');
+                        savePath = path.join(desktopPath, fileName);
+                        saveLocation = 'Desktop';
+                    }
+
+                    // Write file with error handling
+                    const arrayBuffer = await blob.arrayBuffer();
+                    const uint8Array = new Uint8Array(arrayBuffer);
+
+                    try {
+                        fs.writeFileSync(savePath, uint8Array);
+
+                        // Verify file was created
+                        if (!fs.existsSync(savePath)) {
+                            throw new Error('File was not created successfully');
+                        }
+                    } catch (writeError) {
+                        console.error('Error writing file:', writeError);
+                        throw new Error(`Failed to save file to ${saveLocation}: ${writeError.message}`);
+                    }
+
+                    const filePath = savePath;
+
+                    // Build dynamic subject based on filters
+                    let subjectParts = ['Timesheet'];
+
+                    // Add date range
+                    if (filterStartDate && filterEndDate) {
+                        subjectParts.push(`${filterStartDate} to ${filterEndDate}`);
+                    } else if (filterStartDate) {
+                        subjectParts.push(`from ${filterStartDate}`);
+                    } else if (filterEndDate) {
+                        subjectParts.push(`until ${filterEndDate}`);
+                    }
+
+                    // Add client if specified
+                    if (filterClient) {
+                        subjectParts.push(filterClient);
+                    }
+
+                    // Add project if specified
+                    if (filterProject) {
+                        subjectParts.push(filterProject);
+                    }
+
+                    const subject = subjectParts.join(' - ');
+
+                    // Build email body
+                    const dateRange = filterStartDate && filterEndDate
+                        ? `${filterStartDate} to ${filterEndDate}`
+                        : 'the reporting period';
+
+                    let emailBody = `Hello,\n\nPlease find attached my timesheet for ${dateRange}`;
+
+                    if (filterClient || filterProject) {
+                        emailBody += '\n\nProject Details:';
+                        if (filterClient) emailBody += `\nClient: ${filterClient}`;
+                        if (filterProject) emailBody += `\nProject: ${filterProject}`;
+                    }
+
+                    emailBody += `\n\nBest regards`;
+
+                    const { shell } = window.require('electron');
+
+                    // Open Outlook with mailto link
+                    try {
+                        const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
+                        shell.openExternal(mailto);
+
+                        // Wait a moment then show the Excel file for attachment
+                        setTimeout(() => {
+                            shell.showItemInFolder(filePath);
+                        }, 1000);
+
+                        setShowReviewModal(false);
+
+                        // Show success notification
+                        setTimeout(() => {
+                            showNotification(`Outlook opened! Attach ${fileName} from the folder.`, 'success');
+                        }, 500);
+
+                    } catch (err) {
+                        console.error('Failed to open email:', err);
+                        setStorageError('Failed to open email client: ' + err.message);
+                    }
+
+                } catch (error) {
+                    console.error('Error creating email:', error);
+                    setStorageError('Failed to create email draft: ' + error.message);
+                }
+            };
+
             const updateRecentProjects = (projectId) => {
                 setRecentProjects(prev => {
-                    const newRecent = [projectId, ...prev.filter(id => id !== projectId)].slice(0, 5);
+                    const newRecent = [projectId, ...prev.filter(id => id !== projectId)].slice(0, 10);
                     return newRecent;
                 });
             };
@@ -1087,6 +1544,8 @@
                                     setCompactMode(data.settings.compactMode || false);
                                     setDailyGoalEnabled(data.settings.dailyGoalEnabled || false);
                                     setDailyGoalHours(data.settings.dailyGoalHours || 8);
+                                    setIdleDetectionEnabled(data.settings.idleDetectionEnabled || false);
+                                    setIdleTimeoutMinutes(data.settings.idleTimeoutMinutes || 10);
                                 }
                                 setStorageError('Data imported successfully! Please restart the app to see all changes.');
                                 setTimeout(() => setStorageError(null), 5000);
@@ -1194,12 +1653,65 @@
                 ipcRenderer.send('toggle-floating-timer', floatingTimerEnabled);
             }, [floatingTimerEnabled]);
 
-            // Send timer updates to floating window
+            // Send tracking state to main process for background monitoring
+            // Send tracking state to main process for background activity monitoring
             useEffect(() => {
                 if (!ipcRenderer) return;
 
-                if (floatingTimerEnabled && isTracking && currentSession) {
+                ipcRenderer.send('tracking-state-update', {
+                    isTracking,
+                    activityReminderEnabled,
+                    reminderInterval: reminderIntervalMinutes
+                });
+            }, [ipcRenderer, isTracking, activityReminderEnabled, reminderIntervalMinutes]);
+
+            // Listen for idle prompt actions from external window
+            useEffect(() => {
+                if (!ipcRenderer) return;
+
+                const handleIdlePromptAction = (_event, action, promptType) => {
+                    if (action === 'resume') {
+                        if (promptType === 'activity-reminder') {
+                            // Activity reminder - show main window and navigate to Track Time page
+                            console.log('[ACTIVITY REMINDER] User clicked Start Tracking - opening app');
+                            setShowTrackingReminder(false);
+                            setCurrentPage(1); // Navigate to Track Time page
+
+                            // Tell main process to show and focus the window
+                            if (ipcRenderer) {
+                                ipcRenderer.send('show-main-window');
+                            }
+                        } else {
+                            // Idle detection - resume tracking
+                            handleResumeTracking();
+                        }
+                    } else if (action === 'assign') {
+                        if (pausedByIdle || pausedBySystem) {
+                            // Idle detection - assign idle time
+                            handleAssignIdleTime();
+                        } else {
+                            // Activity reminder - just dismiss
+                            console.log('[ACTIVITY REMINDER] User dismissed reminder');
+                            setShowTrackingReminder(false);
+                            setLastReminderTime(Date.now());
+                        }
+                    }
+                };
+
+                ipcRenderer.on('idle-prompt-action', handleIdlePromptAction);
+
+                return () => {
+                    ipcRenderer.removeListener('idle-prompt-action', handleIdlePromptAction);
+                };
+            }, [ipcRenderer, pausedByIdle, pausedBySystem]);
+
+            // Send timer updates to floating window
+            useEffect(() => {
+                if (!ipcRenderer || !floatingTimerEnabled) return;
+
+                if (isTracking && currentSession) {
                     const timerData = {
+                        isTracking: true,
                         elapsedTime,
                         projectCode: currentSession.projectCode,
                         clientName: currentSession.clientName,
@@ -1209,8 +1721,19 @@
                     };
 
                     ipcRenderer.send('update-floating-timer', timerData);
+                } else {
+                    // Send stopped state
+                    ipcRenderer.send('update-floating-timer', {
+                        isTracking: false,
+                        elapsedTime: 0,
+                        projectCode: 'Not tracking',
+                        clientName: '',
+                        projectName: '',
+                        taskCode: '',
+                        subtaskCode: ''
+                    });
                 }
-            }, [floatingTimerEnabled, isTracking, currentSession, elapsedTime]);
+            }, [floatingTimerEnabled, isTracking, currentSession, elapsedTime, ipcRenderer]);
 
             const stopTracking = () => {
                 if (currentSession) {
@@ -1310,6 +1833,80 @@
                 updateRecentProjects(project.id);
 
                 console.log('Switch complete!');
+            };
+
+            // Idle time handling functions
+            const handleResumeTracking = () => {
+                // Resume tracking from where we left off
+                if (currentSession && (pausedByIdle || pausedBySystem)) {
+                    setPausedByIdle(false);
+                    setPausedBySystem(false);
+                    setShowIdlePrompt(false);
+                    setIdleDuration(0);
+                    setIdleStartTime(null);
+
+                    // Restart the timer
+                    setIsTracking(true);
+                    setLastActivityTime(Date.now());
+
+                    showNotification('Tracking resumed for ' + currentSession.projectCode, 'success');
+                }
+            };
+
+            const handleAssignIdleTime = () => {
+                // Assign idle time to the last project
+                if (currentSession && (pausedByIdle || pausedBySystem) && idleDuration > 0) {
+                    const idleHours = idleDuration / (1000 * 60 * 60);
+
+                    // Create a new entry for the idle time
+                    const idleEntry = {
+                        id: Date.now() + Math.random(),
+                        projectId: currentSession.projectId,
+                        projectCode: currentSession.projectCode,
+                        clientName: currentSession.clientName,
+                        projectName: currentSession.projectName,
+                        taskCode: currentSession.taskCode,
+                        subtaskCode: currentSession.subtaskCode,
+                        date: currentSession.date,
+                        startTime: new Date(idleStartTime || Date.now()).toLocaleTimeString(),
+                        endTime: new Date(Date.now()).toLocaleTimeString(),
+                        duration: idleDuration,
+                        hours: idleHours,
+                        comment: (currentComment || '') + (currentComment ? ' ' : '') + '(idle time assigned)'
+                    };
+
+                    setTimeEntries(prev => [...prev, idleEntry]);
+
+                    // Reset idle state and resume tracking
+                    setPausedByIdle(false);
+                    setPausedBySystem(false);
+                    setShowIdlePrompt(false);
+                    setIdleDuration(0);
+                    setIdleStartTime(null);
+
+                    // Resume tracking
+                    setIsTracking(true);
+                    setLastActivityTime(Date.now());
+
+                    const idleMinutes = Math.floor(idleDuration / (1000 * 60));
+                    showNotification(`Assigned ${idleMinutes} minutes of idle time to ${currentSession.projectCode}`, 'success');
+                }
+            };
+
+            const handleDismissTrackingReminder = () => {
+                setShowTrackingReminder(false);
+                // Update lastReminderTime so it doesn't show again immediately
+                setLastReminderTime(Date.now());
+            };
+
+            const handleStartTrackingFromReminder = () => {
+                setShowTrackingReminder(false);
+                if (recentProjects.length > 0 && !selectedProject) {
+                    // Auto-select the most recent project
+                    setSelectedProject(recentProjects[0].toString());
+                }
+                // Switch to Track Time page if not already there
+                setShowSetup(false);
             };
 
             const deleteEntry = (id) => {
@@ -1680,8 +2277,47 @@
                     ? filterStartDate + " to " + filterEndDate
                     : 'All Dates';
 
+                // Sort entries by date
+                const sortedEntries = [...filteredEntries].sort((a, b) => a.date.localeCompare(b.date));
+
+                // Consolidate duplicate entries based on user preference
+                let entriesToExport = sortedEntries;
+                if (mergeEntries) {
+                    const consolidatedEntries = [];
+                    const entryMap = {};
+
+                    sortedEntries.forEach(entry => {
+                        // Create a unique key based on date and relevant fields (excluding comment)
+                        const key = [
+                            entry.date,
+                            entry.clientName || '',
+                            entry.projectName,
+                            entry.taskCode,
+                            entry.subtaskCode
+                        ].join('|');
+
+                        if (entryMap[key]) {
+                            // Add hours to existing entry
+                            entryMap[key].hours += entry.hours;
+                            // Combine comments
+                            if (entry.comment) {
+                                if (entryMap[key].comment && entryMap[key].comment !== entry.comment) {
+                                    entryMap[key].comment += '; ' + entry.comment;
+                                } else if (!entryMap[key].comment) {
+                                    entryMap[key].comment = entry.comment;
+                                }
+                            }
+                        } else {
+                            // Create new consolidated entry
+                            entryMap[key] = { ...entry };
+                            consolidatedEntries.push(entryMap[key]);
+                        }
+                    });
+                    entriesToExport = consolidatedEntries;
+                }
+
                 const projectSummary = {};
-                filteredEntries.forEach(entry => {
+                entriesToExport.forEach(entry => {
                     const key = entry.projectCode;
                     if (!projectSummary[key]) {
                         projectSummary[key] = {
@@ -1703,15 +2339,15 @@
                 ]);
 
                 const detailHeaders = ['Date', 'Project Code', 'Client', 'Project', 'Task', 'Subtask', 'Start', 'End', 'Hours', 'Comment'];
-                const detailRows = filteredEntries.map(entry => [
+                const detailRows = entriesToExport.map(entry => [
                     entry.date,
                     entry.projectCode,
                     entry.clientName,
                     entry.projectName,
                     entry.taskCode,
                     entry.subtaskCode,
-                    entry.startTime,
-                    entry.endTime,
+                    entry.startTime || (mergeEntries ? 'Multiple' : ''),
+                    entry.endTime || (mergeEntries ? 'Multiple' : ''),
                     entry.hours.toFixed(2),
                     entry.comment || ''
                 ]);
@@ -1741,55 +2377,57 @@
                 window.URL.revokeObjectURL(url);
             };
 
-            const exportToExcel = async () => {
-                if (timeEntries.length === 0) {
-                    setStorageError('No entries to export');
-                    return;
-                }
+            // Shared function to generate Excel workbook from time entries
+            const generateExcelWorkbook = async (entriesToUse) => {
+                const ExcelJS = window.require('exceljs');
+                const workbook = new ExcelJS.Workbook();
+                const worksheet = workbook.addWorksheet('ThymeSheet (ALL)');
 
-                const filteredEntries = timeEntries.filter(entry => {
-                    let matches = true;
-                    if (filterStartDate && entry.date < filterStartDate) matches = false;
-                    if (filterEndDate && entry.date > filterEndDate) matches = false;
-                    if (filterClient && entry.clientName !== filterClient) matches = false;
-                    if (filterProject && entry.projectName !== filterProject) matches = false;
-                    return matches;
-                });
+                const filteredEntries = entriesToUse;
 
-                if (filteredEntries.length === 0) {
-                    setStorageError('No entries match the filters');
-                    return;
-                }
-
-                try {
-                    const ExcelJS = window.require('exceljs');
-                    const workbook = new ExcelJS.Workbook();
-                    const worksheet = workbook.addWorksheet('ThymeSheet (ALL)');
-
-                    // Calculate project summary
-                    const projectSummary = {};
+                    // Calculate hierarchical project summary
+                    const hierarchicalSummary = {};
                     let grandTotal = 0;
+
                     filteredEntries.forEach(entry => {
                         const projectName = entry.projectName;
-                        if (!projectSummary[projectName]) {
-                            projectSummary[projectName] = 0;
+                        const taskCode = entry.taskCode;
+                        const subtaskCode = entry.subtaskCode;
+
+                        // Initialize project if needed
+                        if (!hierarchicalSummary[projectName]) {
+                            hierarchicalSummary[projectName] = {
+                                total: 0,
+                                tasks: {}
+                            };
                         }
-                        projectSummary[projectName] += entry.hours;
+
+                        // Initialize task if needed
+                        if (!hierarchicalSummary[projectName].tasks[taskCode]) {
+                            hierarchicalSummary[projectName].tasks[taskCode] = {
+                                total: 0,
+                                subtasks: {}
+                            };
+                        }
+
+                        // Initialize subtask if needed
+                        if (!hierarchicalSummary[projectName].tasks[taskCode].subtasks[subtaskCode]) {
+                            hierarchicalSummary[projectName].tasks[taskCode].subtasks[subtaskCode] = 0;
+                        }
+
+                        // Add hours at all levels
+                        hierarchicalSummary[projectName].tasks[taskCode].subtasks[subtaskCode] += entry.hours;
+                        hierarchicalSummary[projectName].tasks[taskCode].total += entry.hours;
+                        hierarchicalSummary[projectName].total += entry.hours;
                         grandTotal += entry.hours;
                     });
 
-                    // Convert to array
-                    const projectSummaryArray = Object.entries(projectSummary).map(([project, hours]) => ({
-                        project,
-                        hours
-                    }));
-
-                    // PROJECT SUMMARY TABLE
-                    worksheet.addRow(['PROJECT SUMMARY']);
+                    // HIERARCHICAL PROJECT SUMMARY TABLE
+                    worksheet.addRow(['PROJECT SUMMARY - HOURS BY PROJECT, TASK, AND SUBTASK']);
                     worksheet.getCell('A1').font = { bold: true, size: 14 };
                     worksheet.addRow([]);
 
-                    const summaryHeaderRow = worksheet.addRow(['Project Name', 'Total Hours']);
+                    const summaryHeaderRow = worksheet.addRow(['Project / Task / Subtask', 'Hours']);
                     summaryHeaderRow.font = { bold: true };
                     summaryHeaderRow.eachCell((cell) => {
                         cell.fill = {
@@ -1806,9 +2444,23 @@
                         };
                     });
 
-                    projectSummaryArray.forEach(proj => {
-                        const row = worksheet.addRow([proj.project, parseFloat(proj.hours.toFixed(2))]);
-                        row.eachCell((cell) => {
+                    let currentRow = 4;
+
+                    // Sort projects alphabetically
+                    const sortedProjects = Object.keys(hierarchicalSummary).sort();
+
+                    sortedProjects.forEach(projectName => {
+                        const project = hierarchicalSummary[projectName];
+
+                        // Add project row (bold, with background color)
+                        const projectRow = worksheet.addRow([projectName, parseFloat(project.total.toFixed(2))]);
+                        projectRow.font = { bold: true };
+                        projectRow.getCell(1).fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FFE8F5E9' } // Light green
+                        };
+                        projectRow.eachCell((cell) => {
                             cell.border = {
                                 top: { style: 'thin' },
                                 left: { style: 'thin' },
@@ -1816,9 +2468,78 @@
                                 right: { style: 'thin' }
                             };
                         });
+                        currentRow++;
+
+                        // Sort tasks
+                        const sortedTasks = Object.keys(project.tasks).sort();
+
+                        sortedTasks.forEach(taskCode => {
+                            const task = project.tasks[taskCode];
+
+                            // Add task row (indented, semi-bold)
+                            const taskRow = worksheet.addRow(['  ' + taskCode, parseFloat(task.total.toFixed(2))]);
+                            taskRow.font = { bold: true, italic: true };
+                            taskRow.getCell(1).fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FFF1F8F4' } // Very light green
+                            };
+                            taskRow.eachCell((cell) => {
+                                cell.border = {
+                                    top: { style: 'thin' },
+                                    left: { style: 'thin' },
+                                    bottom: { style: 'thin' },
+                                    right: { style: 'thin' }
+                                };
+                            });
+                            currentRow++;
+
+                            // Sort subtasks
+                            const sortedSubtasks = Object.keys(task.subtasks).sort();
+
+                            sortedSubtasks.forEach(subtaskCode => {
+                                const subtaskHours = task.subtasks[subtaskCode];
+
+                                // Add subtask row (double indented, normal weight)
+                                const subtaskRow = worksheet.addRow(['    ' + subtaskCode, parseFloat(subtaskHours.toFixed(2))]);
+                                subtaskRow.eachCell((cell) => {
+                                    cell.border = {
+                                        top: { style: 'thin' },
+                                        left: { style: 'thin' },
+                                        bottom: { style: 'thin' },
+                                        right: { style: 'thin' }
+                                    };
+                                });
+                                currentRow++;
+                            });
+                        });
                     });
 
-                    const summaryLastRow = 3 + projectSummaryArray.length;
+                    // Add grand total row
+                    const grandTotalRow = worksheet.addRow(['GRAND TOTAL', parseFloat(grandTotal.toFixed(2))]);
+                    grandTotalRow.font = { bold: true, size: 12 };
+                    grandTotalRow.getCell(1).fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FF4A7C59' } // Dark green
+                    };
+                    grandTotalRow.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                    grandTotalRow.getCell(2).fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FF4A7C59' }
+                    };
+                    grandTotalRow.getCell(2).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                    grandTotalRow.eachCell((cell) => {
+                        cell.border = {
+                            top: { style: 'medium' },
+                            left: { style: 'thin' },
+                            bottom: { style: 'medium' },
+                            right: { style: 'thin' }
+                        };
+                    });
+
+                    const summaryLastRow = currentRow + 1;
 
                     // DETAILED TIMESHEET TABLE
                     const detailStartRow = summaryLastRow + 3;
@@ -1858,6 +2579,46 @@
 
                     // Sort entries by date
                     const sortedEntries = [...filteredEntries].sort((a, b) => a.date.localeCompare(b.date));
+
+                    // Consolidate duplicate entries based on user preference
+                    const consolidatedEntries = [];
+                    const entryMap = {};
+
+                    sortedEntries.forEach(entry => {
+                        // Create a unique key based on date and relevant fields
+                        // If mergeEntries is true, exclude comment from key to merge entries with same date/task/subtask
+                        const keyFields = [
+                            entry.date,
+                            entry.clientName || '',
+                            entry.projectName,
+                            entry.taskCode,
+                            entry.subtaskCode
+                        ];
+
+                        // Only include comment in key if NOT merging entries
+                        if (!mergeEntries) {
+                            keyFields.push(entry.comment || '');
+                        }
+
+                        const key = keyFields.join('|');
+
+                        if (entryMap[key]) {
+                            // Add hours to existing entry
+                            entryMap[key].hours += entry.hours;
+                            // Combine comments if merging
+                            if (mergeEntries && entry.comment) {
+                                if (entryMap[key].comment && entryMap[key].comment !== entry.comment) {
+                                    entryMap[key].comment += '; ' + entry.comment;
+                                } else if (!entryMap[key].comment) {
+                                    entryMap[key].comment = entry.comment;
+                                }
+                            }
+                        } else {
+                            // Create new consolidated entry
+                            entryMap[key] = { ...entry };
+                            consolidatedEntries.push(entryMap[key]);
+                        }
+                    });
 
                     // Calculate daily and weekly totals
                     const dailyTotals = {};
@@ -1903,7 +2664,7 @@
                     // Add detail rows
                     let currentWeekStart = null;
                     let currentDate = null;
-                    sortedEntries.forEach((entry, index) => {
+                    consolidatedEntries.forEach((entry, index) => {
                         const weekStart = getWeekStart(entry.date);
                         const isNewWeek = weekStart !== currentWeekStart;
                         const isNewDay = entry.date !== currentDate;
@@ -1923,16 +2684,16 @@
                         const formattedDate = monthNames[month] + ' ' + day + ', ' + year;
 
                         // Check if this is the first entry for this date
-                        const isFirstEntryForDate = index === 0 || sortedEntries[index - 1].date !== entry.date;
+                        const isFirstEntryForDate = index === 0 || consolidatedEntries[index - 1].date !== entry.date;
 
                         // Check if this is the first entry for this week
-                        const isFirstEntryForWeek = index === 0 || getWeekStart(sortedEntries[index - 1].date) !== weekStart;
+                        const isFirstEntryForWeek = index === 0 || getWeekStart(consolidatedEntries[index - 1].date) !== weekStart;
 
                         // Check if this is the last entry for this week
-                        const isLastEntryForWeek = index === sortedEntries.length - 1 || getWeekStart(sortedEntries[index + 1].date) !== weekStart;
+                        const isLastEntryForWeek = index === consolidatedEntries.length - 1 || getWeekStart(consolidatedEntries[index + 1].date) !== weekStart;
 
                         const row = worksheet.addRow([
-                            'Week ' + weekOfMonth,
+                            weekOfMonth,
                             formattedDate,
                             entry.clientName || '',
                             entry.projectName,
@@ -1955,14 +2716,14 @@
                         });
                     });
 
-                    // Add grand total row
-                    const grandTotalRow = worksheet.addRow([
+                    // Add grand total row for detailed timesheet
+                    const detailGrandTotalRow = worksheet.addRow([
                         '', '', '', '', '', '', '', '', 'GRAND TOTAL:', parseFloat(grandTotal.toFixed(2))
                     ]);
-                    grandTotalRow.font = { bold: true };
-                    grandTotalRow.getCell(9).font = { bold: true };
-                    grandTotalRow.getCell(10).font = { bold: true };
-                    grandTotalRow.eachCell((cell) => {
+                    detailGrandTotalRow.font = { bold: true };
+                    detailGrandTotalRow.getCell(9).font = { bold: true };
+                    detailGrandTotalRow.getCell(10).font = { bold: true };
+                    detailGrandTotalRow.eachCell((cell) => {
                         cell.border = {
                             top: { style: 'thin' },
                             left: { style: 'thin' },
@@ -2026,15 +2787,15 @@
                             return month + '/' + day + '/' + year;
                         });
 
-                        // Group Worley entries by Work Item, Project No, and Task Code
+                        // Group Worley entries by Work Item, Project No (task code), and Task Code (subtask code)
                         const worleyData = {};
                         worleyEntries.forEach(entry => {
-                            const key = entry.projectName + '|' + entry.projectCode + '|' + entry.taskCode;
+                            const key = entry.projectName + '|' + entry.taskCode + '|' + entry.subtaskCode;
                             if (!worleyData[key]) {
                                 worleyData[key] = {
                                     workItem: entry.projectName,
-                                    projectNo: entry.projectCode,
-                                    taskCode: entry.taskCode,
+                                    projectNo: entry.taskCode,
+                                    taskCode: entry.subtaskCode,
                                     dateHours: {},
                                     total: 0
                                 };
@@ -2139,7 +2900,35 @@
                         });
                     }
 
-                    // Generate file
+                    // Return the workbook
+                    return workbook;
+            };
+
+            const exportToExcel = async () => {
+                if (timeEntries.length === 0) {
+                    setStorageError('No entries to export');
+                    return;
+                }
+
+                const filteredEntries = timeEntries.filter(entry => {
+                    let matches = true;
+                    if (filterStartDate && entry.date < filterStartDate) matches = false;
+                    if (filterEndDate && entry.date > filterEndDate) matches = false;
+                    if (filterClient && entry.clientName !== filterClient) matches = false;
+                    if (filterProject && entry.projectName !== filterProject) matches = false;
+                    return matches;
+                });
+
+                if (filteredEntries.length === 0) {
+                    setStorageError('No entries match the filters');
+                    return;
+                }
+
+                try {
+                    // Use the shared workbook generation function
+                    const workbook = await generateExcelWorkbook(filteredEntries);
+
+                    // Generate file and download
                     const buffer = await workbook.xlsx.writeBuffer();
                     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
                     const url = window.URL.createObjectURL(blob);
@@ -2447,27 +3236,57 @@
 
                                 React.createElement('div', { className: "border-b border-soft-gray pb-6" },
                                     React.createElement('div', { className: "flex items-center justify-between mb-3" },
-                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Auto-Pause Detection"),
+                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Stop Timer on Idle"),
                                         React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
                                             React.createElement('input', {
                                                 type: "checkbox",
-                                                checked: autoPauseEnabled,
-                                                onChange: (e) => setAutoPauseEnabled(e.target.checked),
+                                                checked: idleDetectionEnabled,
+                                                onChange: (e) => setIdleDetectionEnabled(e.target.checked),
                                                 className: "sr-only peer"
                                             }),
                                             React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
                                         )
                                     ),
-                                    React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Detect when computer is idle and prompt to stop timer"),
-                                    autoPauseEnabled && React.createElement('select', {
-                                        value: autoPauseMinutes,
-                                        onChange: (e) => setAutoPauseMinutes(parseInt(e.target.value)),
-                                        className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
-                                    },
-                                        React.createElement('option', { value: "5" }, "After 5 minutes idle"),
-                                        React.createElement('option', { value: "10" }, "After 10 minutes idle"),
-                                        React.createElement('option', { value: "15" }, "After 15 minutes idle"),
-                                        React.createElement('option', { value: "30" }, "After 30 minutes idle")
+                                    React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Automatically pause timer when you're idle, or when computer sleeps/shuts down/locks. Prevents over-billing for inactive time."),
+                                    idleDetectionEnabled && React.createElement('div', { className: "flex items-center gap-3" },
+                                        React.createElement('span', { className: "text-gray-700" }, "Pause after"),
+                                        React.createElement('input', {
+                                            type: "number",
+                                            min: "5",
+                                            max: "60",
+                                            value: idleTimeoutMinutes,
+                                            onChange: (e) => setIdleTimeoutMinutes(Math.max(5, Math.min(60, parseInt(e.target.value) || 10))),
+                                            className: "w-20 px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                                        }),
+                                        React.createElement('span', { className: "text-gray-700" }, "minutes idle")
+                                    )
+                                ),
+
+                                React.createElement('div', { className: "border-b border-soft-gray pb-6" },
+                                    React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                        React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Activity Reminders"),
+                                        React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                            React.createElement('input', {
+                                                type: "checkbox",
+                                                checked: activityReminderEnabled,
+                                                onChange: (e) => setActivityReminderEnabled(e.target.checked),
+                                                className: "sr-only peer"
+                                            }),
+                                            React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                        )
+                                    ),
+                                    React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Remind you to start tracking when you're working but the timer isn't running. Don't miss billable hours!"),
+                                    activityReminderEnabled && React.createElement('div', { className: "flex items-center gap-3" },
+                                        React.createElement('span', { className: "text-gray-700" }, "Remind every"),
+                                        React.createElement('input', {
+                                            type: "number",
+                                            min: "10",
+                                            max: "120",
+                                            value: reminderIntervalMinutes,
+                                            onChange: (e) => setReminderIntervalMinutes(Math.max(10, Math.min(120, parseInt(e.target.value) || 10))),
+                                            className: "w-20 px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                                        }),
+                                        React.createElement('span', { className: "text-gray-700" }, "minutes")
                                     )
                                 ),
 
@@ -2724,7 +3543,7 @@
                                         React.createElement('div', { className: "bg-pearl p-4 rounded-subtle mt-4" },
                                             React.createElement('p', { className: "font-semibold text-eggplant mb-2" }, "⚡ Power Features:"),
                                             React.createElement('ul', { className: "list-disc ml-6 space-y-1" },
-                                                React.createElement('li', null, React.createElement('strong', null, "Recent Projects:"), " Your last 5 projects appear at the top for quick access"),
+                                                React.createElement('li', null, React.createElement('strong', null, "Recent Projects:"), " Your last 10 projects appear at the top for quick access"),
                                                 React.createElement('li', null, React.createElement('strong', null, "Quick Switch:"), " Use the dropdown in the running timer bar to switch projects without stopping"),
                                                 React.createElement('li', null, React.createElement('strong', null, "Always Visible Timer:"), " The compact timer bar stays visible on both pages")
                                             )
@@ -2773,8 +3592,12 @@
                                                 React.createElement('p', null, "Automatically round up your time entries to 5, 10, or 15-minute intervals for cleaner billing. Perfect for hourly billing requirements.")
                                             ),
                                             React.createElement('div', null,
-                                                React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "⏸️ Auto-Pause Detection"),
-                                                React.createElement('p', null, "ThymeSheet monitors mouse, keyboard, and click activity. If you're idle for your chosen duration (5-30 minutes), it asks if you want to stop the timer. Prevents accidental over-billing.")
+                                                React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "⏸️ Stop Timer on Idle"),
+                                                React.createElement('p', null, "Automatically pauses timer when you're idle or when your computer sleeps/shuts down/locks. You can choose to resume tracking or assign the idle time to your project. Prevents accidental over-billing.")
+                                            ),
+                                            React.createElement('div', null,
+                                                React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "🔔 Activity Reminders"),
+                                                React.createElement('p', null, "Get reminded to start tracking when you're working but the timer isn't running. Helps you never miss billable hours! Configurable reminder interval.")
                                             ),
                                             React.createElement('div', null,
                                                 React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "🎯 Daily Goal"),
@@ -2871,37 +3694,37 @@
                             }, React.createElement(ChevronDown))
                         ),
                         shortcutsExpanded && React.createElement('div', { className: "px-4 pb-4 border-t border-soft-gray pt-4" },
-                            React.createElement('div', { className: "space-y-4" },
+                            React.createElement('div', { className: "grid grid-cols-2 gap-6" },
                                 React.createElement('div', null,
-                                    React.createElement('h4', { className: "text-xs font-semibold text-deep-green mb-2 uppercase tracking-wide" }, "Global"),
-                                    React.createElement('div', { className: "space-y-1 text-sm" },
-                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
+                                    React.createElement('h4', { className: "text-xs font-semibold text-deep-green mb-3 uppercase tracking-wide" }, "🌐 Global (works anywhere)"),
+                                    React.createElement('div', { className: "space-y-2 text-sm" },
+                                        React.createElement('div', { className: "flex justify-between items-center" },
                                             React.createElement('span', { className: "text-gray-600" }, "Show/Hide window"),
                                             React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "Ctrl+Shift+Z")
                                         ),
-                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
+                                        React.createElement('div', { className: "flex justify-between items-center" },
                                             React.createElement('span', { className: "text-gray-600" }, "Start/Stop timer"),
                                             React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "Ctrl+Shift+Space")
                                         )
                                     )
                                 ),
                                 React.createElement('div', null,
-                                    React.createElement('h4', { className: "text-xs font-semibold text-deep-green mb-2 uppercase tracking-wide" }, "Track Time Page"),
-                                    React.createElement('div', { className: "space-y-1 text-sm" },
-                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
-                                            React.createElement('span', { className: "text-gray-600" }, "Quick select recent project"),
-                                            React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "1-5")
+                                    React.createElement('h4', { className: "text-xs font-semibold text-deep-green mb-3 uppercase tracking-wide" }, "⏱️ Track Time Page"),
+                                    React.createElement('div', { className: "space-y-2 text-sm" },
+                                        React.createElement('div', { className: "flex justify-between items-center" },
+                                            React.createElement('span', { className: "text-gray-600" }, "Select recent project"),
+                                            React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "1-9, 0")
                                         ),
-                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
-                                            React.createElement('span', { className: "text-gray-600" }, "Start tracking"),
+                                        React.createElement('div', { className: "flex justify-between items-center" },
+                                            React.createElement('span', { className: "text-gray-600" }, "Start/Resume tracking"),
                                             React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "Enter")
                                         ),
-                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
-                                            React.createElement('span', { className: "text-gray-600" }, "Pause/Resume timer"),
+                                        React.createElement('div', { className: "flex justify-between items-center" },
+                                            React.createElement('span', { className: "text-gray-600" }, "Pause/Stop timer"),
                                             React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "Space")
                                         ),
-                                        React.createElement('div', { className: "flex justify-between items-center py-1" },
-                                            React.createElement('span', { className: "text-gray-600" }, "Toggle between pages"),
+                                        React.createElement('div', { className: "flex justify-between items-center" },
+                                            React.createElement('span', { className: "text-gray-600" }, "Switch pages"),
                                             React.createElement('div', { className: "flex gap-1" },
                                                 React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "←"),
                                                 React.createElement('kbd', { className: "px-2 py-1 bg-soft-gray border border-gray-300 rounded text-eggplant text-xs font-mono" }, "→")
@@ -3129,6 +3952,46 @@
                                                     }, React.createElement(Trash2))
                                                 ),
                                                 expandedProjects[clientName + "::" + projectName] && React.createElement('div', { className: "p-2 bg-white space-y-2" },
+                                                    // Add Task button
+                                                    showAddTaskForm !== (clientName + "::" + projectName) && React.createElement('button', {
+                                                        onClick: () => {
+                                                            setShowAddTaskForm(clientName + "::" + projectName);
+                                                            setInlineTaskCode('');
+                                                        },
+                                                        className: "w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-deep-green text-deep-green rounded-subtle hover:bg-pearl transition-colors"
+                                                    },
+                                                        React.createElement(Plus),
+                                                        React.createElement('span', { className: "font-medium" }, "Add Task")
+                                                    ),
+                                                    // Add Task form
+                                                    showAddTaskForm === (clientName + "::" + projectName) && React.createElement('div', { className: "border-2 border-deep-green rounded-subtle p-3 bg-pearl" },
+                                                        React.createElement('div', { className: "flex gap-2" },
+                                                            React.createElement('input', {
+                                                                type: "text",
+                                                                value: inlineTaskCode,
+                                                                onChange: (e) => setInlineTaskCode(e.target.value.toUpperCase()),
+                                                                placeholder: "Enter task code (e.g., 1. MEETINGS)",
+                                                                className: "flex-1 px-3 py-2 border border-soft-gray rounded focus:outline-none focus:border-deep-green",
+                                                                autoFocus: true,
+                                                                onKeyPress: (e) => {
+                                                                    if (e.key === 'Enter') {
+                                                                        addInlineTask(clientName, projectName);
+                                                                    }
+                                                                }
+                                                            }),
+                                                            React.createElement('button', {
+                                                                onClick: () => addInlineTask(clientName, projectName),
+                                                                className: "px-4 py-2 bg-deep-green text-white rounded hover:bg-opacity-90 transition-colors font-medium"
+                                                            }, "Add"),
+                                                            React.createElement('button', {
+                                                                onClick: () => {
+                                                                    setShowAddTaskForm(null);
+                                                                    setInlineTaskCode('');
+                                                                },
+                                                                className: "px-4 py-2 border border-gray-300 text-gray-600 rounded hover:bg-gray-100 transition-colors"
+                                                            }, "Cancel")
+                                                        )
+                                                    ),
                                                     Object.entries(projectTasks).map(([taskCode, subtasks]) =>
                                                         React.createElement('div', { key: clientName + "-" + projectName + "-" + taskCode, className: "border border-soft-gray rounded-subtle overflow-hidden" },
                                                             React.createElement('button', {
@@ -3165,6 +4028,46 @@
                                                                             onClick: () => deleteProjectCode(project.id),
                                                                             className: "text-gray-400 hover:text-eggplant transition-colors ml-3"
                                                                         }, React.createElement(Trash2))
+                                                                    )
+                                                                ),
+                                                                // Add Subtask button
+                                                                showAddSubtaskForm !== (clientName + "::" + projectName + "::" + taskCode) && React.createElement('button', {
+                                                                    onClick: () => {
+                                                                        setShowAddSubtaskForm(clientName + "::" + projectName + "::" + taskCode);
+                                                                        setInlineSubtaskCode('');
+                                                                    },
+                                                                    className: "w-full flex items-center justify-center gap-2 p-2 mt-1 border-2 border-dashed border-eggplant text-eggplant rounded-subtle hover:bg-pearl transition-colors text-sm"
+                                                                },
+                                                                    React.createElement(Plus),
+                                                                    React.createElement('span', { className: "font-medium" }, "Add Subtask")
+                                                                ),
+                                                                // Add Subtask form
+                                                                showAddSubtaskForm === (clientName + "::" + projectName + "::" + taskCode) && React.createElement('div', { className: "border-2 border-eggplant rounded-subtle p-2 mt-1 bg-pearl" },
+                                                                    React.createElement('div', { className: "flex gap-2" },
+                                                                        React.createElement('input', {
+                                                                            type: "text",
+                                                                            value: inlineSubtaskCode,
+                                                                            onChange: (e) => setInlineSubtaskCode(e.target.value.toUpperCase()),
+                                                                            placeholder: "Enter subtask code (e.g., 1.1 Project)",
+                                                                            className: "flex-1 px-3 py-2 border border-soft-gray rounded focus:outline-none focus:border-eggplant text-sm",
+                                                                            autoFocus: true,
+                                                                            onKeyPress: (e) => {
+                                                                                if (e.key === 'Enter') {
+                                                                                    addInlineSubtask(clientName, projectName, taskCode);
+                                                                                }
+                                                                            }
+                                                                        }),
+                                                                        React.createElement('button', {
+                                                                            onClick: () => addInlineSubtask(clientName, projectName, taskCode),
+                                                                            className: "px-3 py-2 bg-eggplant text-white rounded hover:bg-opacity-90 transition-colors font-medium text-sm"
+                                                                        }, "Add"),
+                                                                        React.createElement('button', {
+                                                                            onClick: () => {
+                                                                                setShowAddSubtaskForm(null);
+                                                                                setInlineSubtaskCode('');
+                                                                            },
+                                                                            className: "px-3 py-2 border border-gray-300 text-gray-600 rounded hover:bg-gray-100 transition-colors text-sm"
+                                                                        }, "Cancel")
                                                                     )
                                                                 )
                                                             )
@@ -3402,27 +4305,57 @@
 
                             React.createElement('div', { className: "border-b border-soft-gray pb-6" },
                                 React.createElement('div', { className: "flex items-center justify-between mb-3" },
-                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Auto-Pause Detection"),
+                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Stop Timer on Idle"),
                                     React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
                                         React.createElement('input', {
                                             type: "checkbox",
-                                            checked: autoPauseEnabled,
-                                            onChange: (e) => setAutoPauseEnabled(e.target.checked),
+                                            checked: idleDetectionEnabled,
+                                            onChange: (e) => setIdleDetectionEnabled(e.target.checked),
                                             className: "sr-only peer"
                                         }),
                                         React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
                                     )
                                 ),
-                                React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Detect when computer is idle and prompt to stop timer"),
-                                autoPauseEnabled && React.createElement('select', {
-                                    value: autoPauseMinutes,
-                                    onChange: (e) => setAutoPauseMinutes(parseInt(e.target.value)),
-                                    className: "w-full px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
-                                },
-                                    React.createElement('option', { value: "5" }, "After 5 minutes idle"),
-                                    React.createElement('option', { value: "10" }, "After 10 minutes idle"),
-                                    React.createElement('option', { value: "15" }, "After 15 minutes idle"),
-                                    React.createElement('option', { value: "30" }, "After 30 minutes idle")
+                                React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Automatically pause timer when you're idle, or when computer sleeps/shuts down/locks. Prevents over-billing for inactive time."),
+                                idleDetectionEnabled && React.createElement('div', { className: "flex items-center gap-3" },
+                                    React.createElement('span', { className: "text-gray-700" }, "Pause after"),
+                                    React.createElement('input', {
+                                        type: "number",
+                                        min: "5",
+                                        max: "60",
+                                        value: idleTimeoutMinutes,
+                                        onChange: (e) => setIdleTimeoutMinutes(Math.max(5, Math.min(60, parseInt(e.target.value) || 10))),
+                                        className: "w-20 px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                                    }),
+                                    React.createElement('span', { className: "text-gray-700" }, "minutes idle")
+                                )
+                            ),
+
+                            React.createElement('div', { className: "border-b border-soft-gray pb-6" },
+                                React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                                    React.createElement('h3', { className: "text-lg font-semibold text-eggplant" }, "Activity Reminders"),
+                                    React.createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                        React.createElement('input', {
+                                            type: "checkbox",
+                                            checked: activityReminderEnabled,
+                                            onChange: (e) => setActivityReminderEnabled(e.target.checked),
+                                            className: "sr-only peer"
+                                        }),
+                                        React.createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-green" })
+                                    )
+                                ),
+                                React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, "Remind you to start tracking when you're working but the timer isn't running. Don't miss billable hours!"),
+                                activityReminderEnabled && React.createElement('div', { className: "flex items-center gap-3" },
+                                    React.createElement('span', { className: "text-gray-700" }, "Remind every"),
+                                    React.createElement('input', {
+                                        type: "number",
+                                        min: "10",
+                                        max: "120",
+                                        value: reminderIntervalMinutes,
+                                        onChange: (e) => setReminderIntervalMinutes(Math.max(10, Math.min(120, parseInt(e.target.value) || 10))),
+                                        className: "w-20 px-4 py-2 border border-soft-gray rounded-subtle focus:outline-none focus:border-eggplant"
+                                    }),
+                                    React.createElement('span', { className: "text-gray-700" }, "minutes")
                                 )
                             ),
 
@@ -3590,7 +4523,7 @@
                                     React.createElement('div', { className: "bg-pearl p-4 rounded-subtle mt-4" },
                                         React.createElement('p', { className: "font-semibold text-eggplant mb-2" }, "⚡ Power Features:"),
                                         React.createElement('ul', { className: "list-disc ml-6 space-y-1" },
-                                            React.createElement('li', null, React.createElement('strong', null, "Recent Projects:"), " Your last 5 projects appear at the top for quick access"),
+                                            React.createElement('li', null, React.createElement('strong', null, "Recent Projects:"), " Your last 10 projects appear at the top for quick access"),
                                             React.createElement('li', null, React.createElement('strong', null, "Quick Switch:"), " Use the dropdown in the running timer bar to switch projects without stopping"),
                                             React.createElement('li', null, React.createElement('strong', null, "Always Visible Timer:"), " The compact timer bar stays visible on both pages")
                                         )
@@ -3639,8 +4572,12 @@
                                             React.createElement('p', null, "Automatically round up your time entries to 5, 10, or 15-minute intervals for cleaner billing. Perfect for hourly billing requirements.")
                                         ),
                                         React.createElement('div', null,
-                                            React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "⏸️ Auto-Pause Detection"),
-                                            React.createElement('p', null, "ThymeSheet monitors mouse, keyboard, and click activity. If you're idle for your chosen duration (5-30 minutes), it asks if you want to stop the timer. Prevents accidental over-billing.")
+                                            React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "⏸️ Stop Timer on Idle"),
+                                            React.createElement('p', null, "Automatically pauses timer when you're idle or when your computer sleeps/shuts down/locks. You can choose to resume tracking or assign the idle time to your project. Prevents accidental over-billing.")
+                                        ),
+                                        React.createElement('div', null,
+                                            React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "🔔 Activity Reminders"),
+                                            React.createElement('p', null, "Get reminded to start tracking when you're working but the timer isn't running. Helps you never miss billable hours! Configurable reminder interval.")
                                         ),
                                         React.createElement('div', null,
                                             React.createElement('h4', { className: "font-semibold text-eggplant mb-1" }, "🎯 Daily Goal"),
@@ -3964,14 +4901,14 @@
                         React.createElement('h3', { className: "text-sm font-semibold text-eggplant uppercase tracking-wider" }, "Recent Projects"),
                         React.createElement('div', { className: "text-xs text-gray-600 bg-soft-gray px-3 py-1 rounded-subtle" },
                             "Press ",
-                            React.createElement('kbd', { className: "px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs font-mono mx-1" }, "1-5"),
+                            React.createElement('kbd', { className: "px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs font-mono mx-1" }, "1-9,0"),
                             " then ",
                             React.createElement('kbd', { className: "px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs font-mono mx-1" }, "Enter"),
                             " to start"
                         )
                     ),
                     React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3" },
-                        recentProjects.slice(0, 9).map((projectId, index) => {
+                        recentProjects.slice(0, 10).map((projectId, index) => {
                             const project = projectCodes.find(p => p.id === projectId);
                             if (!project) return null;
                             const isActive = isTracking && currentSession && currentSession.projectId === projectId;
@@ -3991,7 +4928,7 @@
                                      isSelected ? "border-eggplant bg-eggplant bg-opacity-10" :
                                      "border-soft-gray bg-white hover:border-deep-green")
                             },
-                                React.createElement('div', { className: "absolute top-1 right-1 w-5 h-5 bg-deep-green text-white text-xs font-bold rounded-full flex items-center justify-center" }, (index + 1).toString()),
+                                React.createElement('div', { className: "absolute top-1 right-1 w-5 h-5 bg-deep-green text-white text-xs font-bold rounded-full flex items-center justify-center" }, (index === 9 ? '0' : (index + 1).toString())),
                                 React.createElement('div', { className: "text-xs font-semibold text-deep-green truncate" }, project.code),
                                 React.createElement('div', { className: "text-xs text-gray-600 truncate" }, project.clientName),
                                 React.createElement('div', { className: "text-xs text-gray-500 truncate" }, project.subtaskCode),
@@ -4149,13 +5086,39 @@
                             )
                         )
                     ),
-                    React.createElement('button', {
-                        onClick: exportToExcel,
-                        disabled: timeEntries.length === 0,
-                        className: "w-full flex items-center justify-center gap-2 px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    },
-                        React.createElement(Download),
-                        "Export to Excel"
+                    React.createElement('div', { className: "mb-4 p-4 bg-pearl rounded-subtle border border-soft-gray" },
+                        React.createElement('label', { className: "flex items-start gap-3 cursor-pointer" },
+                            React.createElement('input', {
+                                type: "checkbox",
+                                checked: mergeEntries,
+                                onChange: (e) => setMergeEntries(e.target.checked),
+                                className: "mt-1 w-4 h-4 text-deep-green border-gray-300 rounded focus:ring-deep-green"
+                            }),
+                            React.createElement('div', null,
+                                React.createElement('span', { className: "text-sm font-medium text-gray-900" }, "Combine entries for the same task on the same day"),
+                                React.createElement('p', { className: "text-xs text-gray-600 mt-1" },
+                                    "When enabled, multiple time entries for the same task and subtask on the same date will be merged into a single row with combined hours. Comments will be joined together."
+                                )
+                            )
+                        )
+                    ),
+                    React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 gap-4" },
+                        React.createElement('button', {
+                            onClick: exportToExcel,
+                            disabled: timeEntries.length === 0,
+                            className: "flex items-center justify-center gap-2 px-6 py-3 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        },
+                            React.createElement(Download),
+                            "Export to Excel"
+                        ),
+                        React.createElement('button', {
+                            onClick: startReleaseWorkflow,
+                            disabled: timeEntries.length === 0,
+                            className: "flex items-center justify-center gap-2 px-6 py-3 bg-eggplant text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        },
+                            React.createElement(Upload),
+                            "Release to Project Manager"
+                        )
                     )
                 ),
 
@@ -4339,6 +5302,7 @@
                         }, "×")
                     )
                 ),
+
                 // Edit Entry Modal
                 editingEntry && React.createElement('div', {
                     className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
@@ -4573,6 +5537,111 @@
                                 className: "px-3 py-1.5 text-sm bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-colors"
                             }, "Save Changes")
                         )
+                    )
+                ),
+
+                // Review Modal
+                showReviewModal && React.createElement('div', {
+                    className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4",
+                    onClick: () => setShowReviewModal(false)
+                },
+                    React.createElement('div', {
+                        className: "bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col",
+                        onClick: (e) => e.stopPropagation()
+                    },
+                        React.createElement('div', { className: "p-6 border-b border-gray-200 bg-pearl" },
+                            React.createElement('h2', { className: "text-2xl font-semibold text-eggplant" }, "Review Timesheet Before Release"),
+                            React.createElement('p', { className: "text-sm text-gray-600 mt-2" }, "Please review and edit your time entries before releasing to your project manager.")
+                        ),
+                        React.createElement('div', { className: "flex-1 overflow-y-auto p-6" },
+                            React.createElement('div', { className: "overflow-x-auto" },
+                                React.createElement('table', { className: "w-full border-collapse" },
+                                    React.createElement('thead', null,
+                                        React.createElement('tr', { className: "bg-deep-green text-white" },
+                                            React.createElement('th', { className: "px-4 py-2 text-left border border-gray-300" }, "Date"),
+                                            React.createElement('th', { className: "px-4 py-2 text-left border border-gray-300" }, "Project"),
+                                            React.createElement('th', { className: "px-4 py-2 text-left border border-gray-300" }, "Task"),
+                                            React.createElement('th', { className: "px-4 py-2 text-left border border-gray-300" }, "Subtask"),
+                                            React.createElement('th', { className: "px-4 py-2 text-left border border-gray-300" }, "Hours"),
+                                            React.createElement('th', { className: "px-4 py-2 text-left border border-gray-300" }, "Comment")
+                                        )
+                                    ),
+                                    React.createElement('tbody', null,
+                                        reviewEntries.map((entry, index) =>
+                                            React.createElement('tr', { key: index, className: index % 2 === 0 ? 'bg-white' : 'bg-pearl' },
+                                                React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, entry.date),
+                                                React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, entry.projectName),
+                                                React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, entry.taskCode),
+                                                React.createElement('td', { className: "px-4 py-2 border border-gray-300" }, entry.subtaskCode),
+                                                React.createElement('td', { className: "px-4 py-2 border border-gray-300" },
+                                                    React.createElement('input', {
+                                                        type: "number",
+                                                        step: "0.01",
+                                                        value: entry.hours,
+                                                        onChange: (e) => updateReviewEntry(index, 'hours', parseFloat(e.target.value) || 0),
+                                                        className: "w-20 px-2 py-1 border border-soft-gray rounded focus:outline-none focus:border-eggplant"
+                                                    })
+                                                ),
+                                                React.createElement('td', { className: "px-4 py-2 border border-gray-300" },
+                                                    React.createElement('input', {
+                                                        type: "text",
+                                                        value: entry.comment || '',
+                                                        onChange: (e) => updateReviewEntry(index, 'comment', e.target.value),
+                                                        placeholder: "Add comment...",
+                                                        className: "w-full px-2 py-1 border border-soft-gray rounded focus:outline-none focus:border-eggplant"
+                                                    })
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            ),
+                            React.createElement('div', { className: "mt-4 p-4 bg-pearl rounded border border-soft-gray" },
+                                React.createElement('p', { className: "text-sm font-semibold text-eggplant" }, "Total Hours: " + reviewEntries.reduce((sum, e) => sum + e.hours, 0).toFixed(2))
+                            )
+                        ),
+                        React.createElement('div', { className: "p-6 border-t border-gray-200 bg-white flex items-center justify-end gap-4" },
+                            React.createElement('button', {
+                                onClick: () => setShowReviewModal(false),
+                                className: "px-6 py-2 border border-gray-300 text-gray-700 rounded-subtle hover:bg-gray-100 transition-colors"
+                            }, "Cancel"),
+                            React.createElement('button', {
+                                onClick: confirmAndCreateEmail,
+                                className: "px-6 py-2 bg-eggplant text-white rounded-subtle hover:bg-opacity-90 transition-colors font-medium"
+                            }, "Confirm & Create Email")
+                        )
+                    )
+                ),
+
+                // Email Provider Selection Modal
+                showProviderSelection && React.createElement('div', {
+                    className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4",
+                    onClick: () => setShowProviderSelection(false)
+                },
+                    React.createElement('div', {
+                        className: "bg-white rounded-lg shadow-xl max-w-md w-full p-6",
+                        onClick: (e) => e.stopPropagation()
+                    },
+                        React.createElement('h2', { className: "text-2xl font-semibold text-eggplant mb-4" }, "Select Email Provider"),
+                        React.createElement('p', { className: "text-sm text-gray-600 mb-6" }, "Choose your preferred email provider. This will be saved for future releases."),
+                        React.createElement('div', { className: "space-y-3" },
+                            React.createElement('button', {
+                                onClick: () => selectEmailProvider('outlook'),
+                                className: "w-full flex items-center justify-center gap-3 px-6 py-4 border-2 border-eggplant rounded-lg hover:bg-pearl transition-colors"
+                            },
+                                React.createElement('span', { className: "text-lg font-medium text-eggplant" }, "Outlook")
+                            ),
+                            React.createElement('button', {
+                                onClick: () => selectEmailProvider('gmail'),
+                                className: "w-full flex items-center justify-center gap-3 px-6 py-4 border-2 border-deep-green rounded-lg hover:bg-pearl transition-colors"
+                            },
+                                React.createElement('span', { className: "text-lg font-medium text-deep-green" }, "Gmail")
+                            )
+                        ),
+                        React.createElement('button', {
+                            onClick: () => setShowProviderSelection(false),
+                            className: "w-full mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                        }, "Cancel")
                     )
                 )
                 )

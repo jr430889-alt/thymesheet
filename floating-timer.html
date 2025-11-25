@@ -180,12 +180,30 @@
             const timerElement = document.getElementById('timer');
             const projectCodeElement = document.getElementById('projectCode');
             const projectDetailsElement = document.getElementById('projectDetails');
+            const trackingStatus = document.querySelector('.tracking-status');
 
-            timerElement.textContent = formatTime(data.elapsedTime);
+            // Determine if tracking based on multiple indicators
+            const isActuallyTracking = data.isTracking === true || (data.elapsedTime > 0 && data.projectCode && data.projectCode !== 'Not tracking');
+
+            // Always update timer display
+            timerElement.textContent = formatTime(data.elapsedTime || 0);
             projectCodeElement.textContent = data.projectCode || 'No project';
 
-            const details = `${data.clientName} • ${data.projectName}`;
-            projectDetailsElement.textContent = details;
+            if (data.clientName && data.projectName) {
+                const details = `${data.clientName} • ${data.projectName}`;
+                projectDetailsElement.textContent = details;
+            } else {
+                projectDetailsElement.textContent = 'Start tracking to see timer';
+            }
+
+            // Update tracking status indicator
+            if (isActuallyTracking) {
+                trackingStatus.innerHTML = '<span class="recording-indicator"></span>TRACKING';
+                trackingStatus.style.color = '#e81123';
+            } else {
+                trackingStatus.innerHTML = 'PAUSED';
+                trackingStatus.style.color = '#5a5a5a';
+            }
         });
 
         // Handle button clicks

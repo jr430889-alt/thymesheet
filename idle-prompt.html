@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Idle Prompt</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: transparent;
+            overflow: hidden;
+            padding: 6px;
+        }
+
+        .prompt-container {
+            background: #ffffff;
+            border-left: 4px solid #6B4C7C;
+            border-radius: 6px;
+            padding: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            width: 384px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .header {
+            display: flex;
+            align-items: start;
+            gap: 12px;
+        }
+
+        .indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #6B4C7C;
+            flex-shrink: 0;
+            margin-top: 4px;
+        }
+
+        .content {
+            flex: 1;
+        }
+
+        .title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #6B4C7C;
+            margin-bottom: 6px;
+        }
+
+        .message {
+            font-size: 13px;
+            color: #5a5a5a;
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+
+        .question {
+            font-size: 13px;
+            color: #1a1a1a;
+            font-weight: 500;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-resume {
+            background: #2D5F5D;
+            color: white;
+        }
+
+        .btn-resume:hover {
+            background: #244d4b;
+        }
+
+        .btn-assign {
+            background: #6B4C7C;
+            color: white;
+        }
+
+        .btn-assign:hover {
+            background: #5a3f67;
+        }
+
+        .helper-text {
+            font-size: 11px;
+            color: #888;
+            text-align: center;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <div class="prompt-container">
+        <div class="header">
+            <div class="indicator"></div>
+            <div class="content">
+                <div class="title" id="title">Idle Time Detected</div>
+                <div class="message" id="message">You've been idle for 10 minutes while tracking "WO-04 MSMP--".</div>
+                <div class="question">What would you like to do?</div>
+            </div>
+        </div>
+        <div class="buttons">
+            <button class="btn btn-resume" id="resumeBtn">Resume Tracking</button>
+            <button class="btn btn-assign" id="assignBtn">Assign Idle Time</button>
+        </div>
+        <div class="helper-text">Resume will continue tracking. Assign will log the idle time to this project.</div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        let currentPromptType = 'idle'; // Track which type of prompt this is
+
+        // Update content when prompt data is received
+        ipcRenderer.on('idle-prompt-data', (event, data) => {
+            const titleElement = document.getElementById('title');
+            const messageElement = document.getElementById('message');
+            const resumeBtn = document.getElementById('resumeBtn');
+            const assignBtn = document.getElementById('assignBtn');
+            const helperText = document.querySelector('.helper-text');
+
+            currentPromptType = data.type; // Store the prompt type
+
+            if (data.type === 'idle') {
+                // IDLE DETECTION MODE: Timer was running but user became idle
+                titleElement.textContent = data.isSystemSleep ? 'System Sleep Detected' : 'Idle Time Detected';
+
+                if (data.isSystemSleep) {
+                    messageElement.textContent = `Your computer went to sleep while tracking "${data.projectCode}". You were idle for ${data.idleMinutes} minutes.`;
+                } else {
+                    messageElement.textContent = `You've been idle for ${data.idleMinutes} minutes while tracking "${data.projectCode}".`;
+                }
+
+                resumeBtn.textContent = 'Resume Tracking';
+                assignBtn.textContent = 'Assign Idle Time';
+                helperText.textContent = 'Resume will continue tracking. Assign will log the idle time to this project.';
+
+            } else if (data.type === 'activity-reminder') {
+                // ACTIVITY REMINDER MODE: Timer is NOT running but user is active
+                titleElement.textContent = 'Activity Detected';
+                messageElement.textContent = "You're working but not tracking time. Would you like to start tracking?";
+
+                resumeBtn.textContent = 'Start Tracking';
+                assignBtn.textContent = 'Dismiss';
+                helperText.textContent = 'Don\'t miss billable hours! Start tracking to log your work time.';
+            }
+        });
+
+        // Handle button clicks - send prompt type along with action
+        document.getElementById('resumeBtn').addEventListener('click', () => {
+            ipcRenderer.send('idle-prompt-response', 'resume', currentPromptType);
+        });
+
+        document.getElementById('assignBtn').addEventListener('click', () => {
+            ipcRenderer.send('idle-prompt-response', 'assign', currentPromptType);
+        });
+    </script>
+</body>
+</html>
