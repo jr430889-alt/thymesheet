@@ -1,0 +1,320 @@
+================================================================================
+                           PRIVACY POLICY
+                    ThymeSheet Time Tracking Software
+================================================================================
+
+Version: 2.2.6
+Effective Date: January 1, 2025
+Last Updated: November 26, 2025
+
+================================================================================
+1. INTRODUCTION
+================================================================================
+
+This Privacy Policy describes how [LICENSOR_NAME] ("we," "us," or "our")
+handles information in connection with the ThymeSheet software application
+("Software"). We are committed to protecting your privacy and being transparent
+about our data practices.
+
+IMPORTANT: ThymeSheet is designed as a privacy-first, offline-first application.
+We do not collect, store, or transmit your personal time tracking data.
+
+================================================================================
+2. INFORMATION WE DO NOT COLLECT
+================================================================================
+
+ThymeSheet does NOT collect, store, or transmit:
+
+- Your time tracking entries
+- Project names, client names, or task details
+- Comments or notes you add to time entries
+- Any content of exported reports
+- Your name, email address, or contact information
+- Financial information or billing data
+- Usage patterns or analytics
+- Behavioral data or statistics
+- Screen captures or activity monitoring data
+- Location data
+- Any personally identifiable information (PII)
+
+================================================================================
+3. LOCAL DATA STORAGE
+================================================================================
+
+All of your data is stored exclusively on YOUR computer:
+
+Data Location:
+- Time tracking data: Stored locally in your operating system's standard user
+  data directory
+- License information: Stored locally in a secure format on your computer
+- Application settings: Stored locally on your computer
+
+Your Data Belongs to You:
+- You have complete ownership and control of all data you create
+- Your data never leaves your computer (except when YOU choose to export it)
+- We have no access to your data at any time
+- We cannot view, access, or recover your data
+
+Your Responsibility:
+- You are solely responsible for backing up your time tracking data
+- We recommend regular exports to secure the data you create
+- Data loss due to hardware failure, software errors, or user actions is
+  your responsibility
+
+================================================================================
+4. INFORMATION WE DO COLLECT
+================================================================================
+
+4.1 License Activation Data
+When you activate the Software, we collect minimal hardware identifiers to
+bind your license to your computer:
+
+What We Collect:
+- Unique hardware identifiers derived from your computer
+- These identifiers are used solely for license validation
+- No personally identifiable information is collected
+
+How It's Used:
+- To ensure your license is used on only one computer as per the license terms
+- To allow the Software to reactivate automatically if you reinstall
+
+Where It's Stored:
+- Stored locally on your computer only
+- Not transmitted to any external servers
+
+4.2 Update Checking (Optional)
+If you choose to check for updates using the built-in update checker:
+
+What Happens:
+- The Software connects to external servers to check if a newer version exists
+- No personal information is transmitted during this check
+- No time tracking data is transmitted
+- No usage data or analytics are sent
+
+What May Be Collected by Third Parties:
+- Your IP address may be visible to the update server (standard web request)
+- Connection timestamp (standard server logs)
+- This information is NOT collected by us, but by the server infrastructure
+  used for software distribution
+
+How to Opt Out:
+- You can disable update checking by blocking the Software's network access
+  using your firewall
+- The Software will continue to function normally offline
+
+================================================================================
+5. DATA SHARING AND DISCLOSURE
+================================================================================
+
+We do NOT share, sell, rent, or disclose any information about you or your
+use of the Software to third parties.
+
+No Third-Party Services:
+- The Software does not integrate with third-party analytics services
+- No tracking pixels, cookies, or web beacons are used
+- No advertising networks have access to any data
+- No data brokers receive any information
+
+Legal Exceptions:
+We may disclose information only if required by law, such as:
+- Valid court orders or subpoenas
+- Legal process requiring disclosure
+- Protection of our legal rights
+
+However, because we do not collect or store your time tracking data, we cannot
+disclose what we do not have.
+
+================================================================================
+6. DATA SECURITY
+================================================================================
+
+Local Security:
+- Your data is stored on your computer using standard file system security
+- License information is stored in a format designed to prevent tampering
+- We recommend using your operating system's security features (encryption,
+  access controls) to protect your data
+
+No Cloud Storage:
+- We do not transmit your data to cloud servers
+- We do not provide cloud backup or synchronization services
+- Your data security is dependent on your computer's security
+
+Your Responsibility:
+- Protect your computer with antivirus software
+- Use strong passwords for your user account
+- Enable disk encryption if handling sensitive client data
+- Regularly backup your data to secure locations
+
+================================================================================
+7. CHILDREN'S PRIVACY
+================================================================================
+
+The Software is not intended for use by children under the age of 13 (or the
+applicable age of digital consent in your jurisdiction). We do not knowingly
+collect information from children.
+
+If a parent or guardian becomes aware that a child has provided us with
+information, please contact us and we will take appropriate action.
+
+================================================================================
+8. YOUR RIGHTS
+================================================================================
+
+Because all data is stored locally on your computer, you have complete control:
+
+Right to Access:
+- You can access all your data at any time through the Software interface
+- You can view raw data files in your user data directory
+
+Right to Export:
+- You can export your data to CSV format at any time
+- Exported data is in an open, readable format
+
+Right to Delete:
+- You can delete individual time entries through the Software interface
+- You can delete all data by uninstalling the Software and removing the data
+  directory
+- We do not retain any copies of your data
+
+Right to Portability:
+- Exported CSV files can be used with other time tracking systems
+- Your data is not locked into proprietary formats
+
+================================================================================
+9. INTERNATIONAL DATA TRANSFERS
+================================================================================
+
+Because all data is stored locally on your computer, there are no international
+data transfers. Your data stays where your computer is located.
+
+If you choose to use update checking:
+- Update requests may be routed through servers in various locations
+- No personal or time tracking data is transmitted during these requests
+
+================================================================================
+10. CHANGES TO THIS PRIVACY POLICY
+================================================================================
+
+We may update this Privacy Policy from time to time. Changes will be effective
+upon:
+- Posting the updated policy with the Software
+- Including the updated policy in Software updates
+
+Your Notification:
+- We will update the "Last Updated" date at the top of this policy
+- Significant changes will be communicated through the Software's update notes
+
+Your Consent:
+- Continued use of the Software after changes constitutes acceptance of the
+  updated Privacy Policy
+- If you do not agree with changes, discontinue use of the Software
+
+================================================================================
+11. THIRD-PARTY COMPONENTS
+================================================================================
+
+The Software incorporates open-source components (Electron, React, ExcelJS, etc.)
+that have their own privacy and data handling characteristics:
+
+Electron Framework:
+- Enables the desktop application functionality
+- Does not collect or transmit data on behalf of the application
+
+React Library:
+- Provides user interface rendering
+- Does not collect or transmit data
+
+Other Components:
+- All included open-source libraries are used solely for local application
+  functionality
+- None of these components collect or transmit your data
+
+================================================================================
+12. COMPLIANCE WITH PRIVACY REGULATIONS
+================================================================================
+
+GDPR (European Union):
+- Because we do not collect personal data, most GDPR provisions do not apply
+- Hardware identifiers used for licensing are processed under legitimate
+  interest for license enforcement
+- You have the right to object to this processing by discontinuing use
+
+CCPA (California):
+- We do not sell personal information
+- We do not collect personal information beyond hardware identifiers for
+  licensing
+- California residents have the right to request information about data
+  collection, which is described in this policy
+
+Other Jurisdictions:
+- Our privacy practices are designed to comply with privacy laws worldwide
+- If you have questions about compliance in your jurisdiction, contact us
+
+================================================================================
+13. COOKIES AND TRACKING TECHNOLOGIES
+================================================================================
+
+The Software does NOT use:
+- Cookies
+- Web beacons
+- Tracking pixels
+- Analytics scripts
+- Advertising identifiers
+- Any other tracking technologies
+
+The Software operates as a standalone desktop application without web-based
+tracking.
+
+================================================================================
+14. DATA RETENTION
+================================================================================
+
+By Us:
+- We do not retain any of your time tracking data (we never receive it)
+- Hardware identifiers for licensing are stored locally on your computer only
+- We have no data to delete or retain
+
+By You:
+- You control how long your time tracking data is stored
+- Data persists on your computer until you delete it
+- Uninstalling the Software does not automatically delete your data
+- To completely remove data, delete the user data directory after uninstalling
+
+================================================================================
+15. BUSINESS TRANSFERS
+================================================================================
+
+In the event of a merger, acquisition, or sale of assets:
+- This Privacy Policy will continue to apply
+- Any successor entity will be bound by these privacy practices
+- Your data remains on your computer and is not part of any business transfer
+
+================================================================================
+16. CONTACT INFORMATION
+================================================================================
+
+If you have questions about this Privacy Policy or our privacy practices:
+
+Email: [YOUR_SUPPORT_EMAIL]
+Support: [YOUR_SUPPORT_URL]
+GitHub Issues: https://github.com/jr430889-alt/thymesheet/issues
+
+We will respond to privacy inquiries within a reasonable timeframe.
+
+================================================================================
+17. ACKNOWLEDGMENT
+================================================================================
+
+By installing and using the Software, you acknowledge that you have read and
+understood this Privacy Policy and agree to its terms.
+
+If you do not agree with this Privacy Policy, do not install or use the
+Software.
+
+================================================================================
+
+© 2025 [LICENSOR_NAME]. All rights reserved.
+
+This Privacy Policy was last updated on November 26, 2025.
+
+================================================================================

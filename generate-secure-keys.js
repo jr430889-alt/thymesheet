@@ -18,33 +18,44 @@ function generateRandomPart() {
   return result;
 }
 
-function calculateChecksum(part1, part2, secret) {
-  const data = secret + part1 + part2;
+function calculateChecksum(part1, secret) {
+  const data = secret + part1;
   const hash = crypto.createHash('sha256').update(data).digest('hex');
   return hash.substring(0, 4).toUpperCase();
 }
 
-function generateLicenseKey() {
+function generateLicenseKey(type = 'PREM') {
   const part1 = generateRandomPart();
-  const part2 = generateRandomPart();
-  const checksum = calculateChecksum(part1, part2, LICENSE_SECRET);
+  const checksum = calculateChecksum(part1, LICENSE_SECRET);
 
-  return `THYME-${part1}-${part2}-${checksum}`;
+  return `THYME-${type}-${part1}-${checksum}`;
 }
 
-// Get number of keys to generate from command line
+// Get number of keys to generate from command line and type
 const numKeys = parseInt(process.argv[2]) || 5;
+const keyType = (process.argv[3] || 'PREM').toUpperCase();
+
+// Validate key type
+if (keyType !== 'PREM' && keyType !== 'TRIL') {
+  console.error('\n❌ ERROR: Key type must be either PREM or TRIL');
+  console.log('\nUsage: node generate-secure-keys.js <number> <type>');
+  console.log('  number: Number of keys to generate (default: 5)');
+  console.log('  type:   PREM (premium) or TRIL (trial) (default: PREM)\n');
+  process.exit(1);
+}
+
+const keyTypeName = keyType === 'PREM' ? 'Premium' : 'Trial';
 
 console.log('\n╔════════════════════════════════════════════════════════════╗');
 console.log('║        ThymeSheet Secure License Key Generator            ║');
 console.log('╚════════════════════════════════════════════════════════════╝\n');
 
-console.log(`Generating ${numKeys} cryptographically valid license keys...\n`);
+console.log(`Generating ${numKeys} ${keyTypeName} license keys...\n`);
 console.log('─'.repeat(60));
 
 const keys = [];
 for (let i = 0; i < numKeys; i++) {
-  const key = generateLicenseKey();
+  const key = generateLicenseKey(keyType);
   keys.push(key);
   console.log(`${(i + 1).toString().padStart(3, ' ')}. ${key}`);
 }

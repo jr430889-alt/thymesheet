@@ -5,6 +5,13 @@ const crypto = require('crypto');
 const os = require('os');
 const XLSX = require('xlsx');
 
+// Load version from package.json
+const packageJson = require('./package.json');
+const APP_VERSION = packageJson.version;
+
+// Load feature flags and license tiers
+const { FEATURES, LICENSE_TIERS, LICENSE_KEY_PREFIXES, TRIAL_DURATION_DAYS } = require('./features.js');
+
 // Request single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -66,18 +73,24 @@ const LICENSE_SECRET = 'ThymeSheetSecretKey2024!';
 
 // Cryptographic license key validation
 function validateLicenseKeyFormat(licenseKey) {
-  // Expected format: THYME-XXXX-XXXX-XXXX
+  // Expected format: THYME-TRIL-XXXX-XXXX or THYME-PREM-XXXX-XXXX
   const parts = licenseKey.split('-');
 
   if (parts.length !== 4 || parts[0] !== 'THYME') {
     return false;
   }
 
-  // Each part should be 4 characters (alphanumeric)
-  for (let i = 1; i < 4; i++) {
-    if (parts[i].length !== 4 || !/^[A-Z0-9]+$/.test(parts[i])) {
-      return false;
-    }
+  // Second part should be TRIL or PREM
+  if (parts[1] !== 'TRIL' && parts[1] !== 'PREM') {
+    return false;
+  }
+
+  // Parts 2 and 3 should be 4 characters (alphanumeric)
+  if (parts[2].length !== 4 || !/^[A-Z0-9]+$/.test(parts[2])) {
+    return false;
+  }
+  if (parts[3].length !== 4 || !/^[A-Z0-9]+$/.test(parts[3])) {
+    return false;
   }
 
   return true;
@@ -89,16 +102,15 @@ function verifyLicenseKey(licenseKey) {
   }
 
   const parts = licenseKey.split('-');
-  const part1 = parts[1];
-  const part2 = parts[2];
-  const checksum = parts[3];
+  const part1 = parts[2]; // After TRIL/PREM
+  const part2 = parts[3]; // Checksum
 
   // Calculate expected checksum
-  const data = LICENSE_SECRET + part1 + part2;
+  const data = LICENSE_SECRET + part1;
   const hash = crypto.createHash('sha256').update(data).digest('hex');
   const expectedChecksum = hash.substring(0, 4).toUpperCase();
 
-  return checksum === expectedChecksum;
+  return part2 === expectedChecksum;
 }
 
 // Validate and activate license
@@ -192,6 +204,210 @@ function getKeyFromPool() {
   }
 }
 
+// ============================================================================
+// NEW: License Tier System (FREE/TRIAL/PREMIUM)
+// ============================================================================
+
+// Get current license state and tier
+function getCurrentLicenseState() {
+  // Check if license file exists
+  if (!fs.existsSync(licenseFilePath)) {
+    return {
+      state: 'new',
+      tier: LICENSE_TIERS.FREE,
+      needsActivation: true,
+      message: 'No License Found'
+    };
+  }
+
+  try {
+    const license = JSON.parse(fs.readFileSync(licenseFilePath, 'utf8'));
+    const hardwareId = getHardwareId();
+
+    // Verify hardware ID matches
+    if (license.hardwareId !== hardwareId) {
+      return {
+        state: 'invalid',
+        tier: LICENSE_TIERS.FREE,
+        error: 'License is not valid for this computer',
+        message: 'Invalid License'
+      };
+    }
+
+    // Verify license key is valid
+    if (!verifyLicenseKey(license.licenseKey)) {
+      return {
+        state: 'invalid',
+        tier: LICENSE_TIERS.FREE,
+        error: 'License key is corrupted or invalid',
+        message: 'Invalid License'
+      };
+    }
+
+    // Check if premium license
+    if (license.licenseKey.includes(`-${LICENSE_KEY_PREFIXES.PREMIUM}-`)) {
+      return {
+        state: 'premium',
+        tier: LICENSE_TIERS.PREMIUM,
+        activatedAt: license.activatedAt,
+        upgradedAt: license.upgradedAt,
+        message: 'Premium License Active'
+      };
+    }
+
+    // Check if trial license
+    if (license.licenseKey.includes(`-${LICENSE_KEY_PREFIXES.TRIAL}-`)) {
+      const activatedDate = new Date(license.activatedAt);
+      const now = new Date();
+      const trialEndDate = new Date(activatedDate);
+      trialEndDate.setDate(trialEndDate.getDate() + TRIAL_DURATION_DAYS);
+
+      const daysElapsed = Math.floor((now - activatedDate) / (1000 * 60 * 60 * 24));
+      const daysRemaining = TRIAL_DURATION_DAYS - daysElapsed;
+
+      if (now < trialEndDate) {
+        // Trial still active
+        return {
+          state: 'trial',
+          tier: LICENSE_TIERS.PREMIUM, // Trial has premium access
+          activatedAt: license.activatedAt,
+          trialEndsAt: trialEndDate.toISOString(),
+          daysRemaining: Math.max(1, daysRemaining),
+          message: `Trial: ${Math.max(1, daysRemaining)} day${daysRemaining !== 1 ? 's' : ''} remaining`
+        };
+      } else {
+        // Trial expired
+        return {
+          state: 'trial_expired',
+          tier: LICENSE_TIERS.FREE,
+          activatedAt: license.activatedAt,
+          trialEndedAt: trialEndDate.toISOString(),
+          message: 'Trial Ended - Upgrade to Premium'
+        };
+      }
+    }
+
+    // Unknown license type - default to free
+    return {
+      state: 'free',
+      tier: LICENSE_TIERS.FREE,
+      message: 'Free Version'
+    };
+
+  } catch (error) {
+    console.error('Error reading license file:', error);
+    return {
+      state: 'error',
+      tier: LICENSE_TIERS.FREE,
+      error: 'License file is corrupted',
+      message: 'License Error'
+    };
+  }
+}
+
+// Activate trial license (called on first launch)
+function activateTrial() {
+  try {
+    // Get trial key from pool
+    const keyResult = getKeyFromPool();
+    if (!keyResult.success) {
+      return { success: false, error: keyResult.error };
+    }
+
+    const trialKey = keyResult.key;
+    const hardwareId = getHardwareId();
+    const now = new Date();
+    const trialEnd = new Date(now);
+    trialEnd.setDate(trialEnd.getDate() + TRIAL_DURATION_DAYS);
+
+    const licenseData = {
+      licenseKey: trialKey,
+      licenseType: 'trial',
+      hardwareId: hardwareId,
+      activatedAt: now.toISOString(),
+      trialEndsAt: trialEnd.toISOString()
+    };
+
+    fs.writeFileSync(licenseFilePath, JSON.stringify(licenseData, null, 2));
+
+    return {
+      success: true,
+      message: `Welcome to ThymeSheet! You have ${TRIAL_DURATION_DAYS} days of full Premium access.`,
+      daysRemaining: TRIAL_DURATION_DAYS,
+      trialEndsAt: trialEnd.toISOString()
+    };
+  } catch (error) {
+    console.error('Error activating trial:', error);
+    return { success: false, error: 'Failed to activate trial license' };
+  }
+}
+
+// Upgrade to premium license
+function upgradeToPremium(premiumKey) {
+  // Validate premium key format
+  if (!premiumKey.includes(`-${LICENSE_KEY_PREFIXES.PREMIUM}-`)) {
+    return { success: false, error: 'Invalid premium license key format' };
+  }
+
+  // Verify key is valid
+  if (!verifyLicenseKey(premiumKey)) {
+    return { success: false, error: 'Invalid premium license key' };
+  }
+
+  try {
+    const hardwareId = getHardwareId();
+    const existingLicense = fs.existsSync(licenseFilePath)
+      ? JSON.parse(fs.readFileSync(licenseFilePath, 'utf8'))
+      : null;
+
+    // Check if this premium key is already activated on different hardware
+    if (existingLicense && existingLicense.licenseKey === premiumKey && existingLicense.hardwareId !== hardwareId) {
+      return { success: false, error: 'This premium license key has already been activated on another computer' };
+    }
+
+    const licenseData = {
+      licenseKey: premiumKey,
+      licenseType: 'premium',
+      hardwareId: hardwareId,
+      activatedAt: existingLicense?.activatedAt || new Date().toISOString(),
+      upgradedAt: new Date().toISOString()
+    };
+
+    fs.writeFileSync(licenseFilePath, JSON.stringify(licenseData, null, 2));
+
+    return {
+      success: true,
+      message: 'Premium activated! All features unlocked.'
+    };
+  } catch (error) {
+    console.error('Error upgrading to premium:', error);
+    return { success: false, error: 'Failed to activate premium license' };
+  }
+}
+
+// Check if a feature can be accessed based on current tier
+function canAccessFeature(featureName) {
+  const { tier } = getCurrentLicenseState();
+  const requiredTier = FEATURES[featureName];
+
+  if (!requiredTier) {
+    console.warn(`Unknown feature: ${featureName}`);
+    return false;
+  }
+
+  // Free features available to everyone
+  if (requiredTier === LICENSE_TIERS.FREE) {
+    return true;
+  }
+
+  // Premium features require premium tier
+  if (requiredTier === LICENSE_TIERS.PREMIUM) {
+    return tier === LICENSE_TIERS.PREMIUM;
+  }
+
+  return false;
+}
+
 // IPC Handlers for license operations
 ipcMain.handle('check-license', () => {
   return checkLicense();
@@ -203,6 +419,23 @@ ipcMain.handle('get-key-from-pool', () => {
 
 ipcMain.handle('activate-license', (_event, licenseKey) => {
   return validateAndActivateLicense(licenseKey);
+});
+
+// NEW: IPC Handlers for license tier system
+ipcMain.handle('get-license-state', () => {
+  return getCurrentLicenseState();
+});
+
+ipcMain.handle('activate-trial', () => {
+  return activateTrial();
+});
+
+ipcMain.handle('upgrade-to-premium', (_event, premiumKey) => {
+  return upgradeToPremium(premiumKey);
+});
+
+ipcMain.handle('can-access-feature', (_event, featureName) => {
+  return canAccessFeature(featureName);
 });
 
 // IPC Handlers for data operations
@@ -329,8 +562,12 @@ ipcMain.handle('browse-csv-file', async () => {
 
 // Floating timer window functions
 function createFloatingTimerWindow() {
-  if (floatingTimerWindow) return;
+  if (floatingTimerWindow) {
+    console.log('Floating timer window already exists');
+    return;
+  }
 
+  console.log('Creating floating timer window...');
   const {screen} = require('electron');
   const primaryDisplay = screen.getPrimaryDisplay();
   const {width, height} = primaryDisplay.workAreaSize;
@@ -345,6 +582,7 @@ function createFloatingTimerWindow() {
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
+    show: false,  // Create hidden initially
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -356,8 +594,15 @@ function createFloatingTimerWindow() {
   floatingTimerWindow.setAlwaysOnTop(true, 'floating', 1);
 
   floatingTimerWindow.on('closed', () => {
+    console.log('Floating timer window closed');
     floatingTimerWindow = null;
   });
+
+  floatingTimerWindow.webContents.on('did-finish-load', () => {
+    console.log('Floating timer window loaded successfully');
+  });
+
+  console.log('Floating timer window created successfully');
 }
 
 function closeFloatingTimerWindow() {
@@ -461,13 +706,20 @@ ipcMain.on('show-main-window', () => {
     mainWindow.focus();
     mainWindow.setAlwaysOnTop(true);
     mainWindow.setAlwaysOnTop(false); // Brings window to front
+    windowCycleState = 'main';
+    if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+      hideFloatingTimerWindow();
+    }
     console.log('[MAIN] Main window shown and focused');
   }
 });
 
 // IPC handlers for floating timer
-let floatingTimerEnabled = false;
+let floatingTimerEnabled = true;  // Enable by default for 3-state cycling
 let isMainWindowMinimized = false;
+
+// Window state for 3-state cycling: 'main', 'floating', 'hidden'
+let windowCycleState = 'main';
 
 ipcMain.on('toggle-floating-timer', (event, enabled) => {
   floatingTimerEnabled = enabled;
@@ -680,14 +932,64 @@ function createWindow() {
         },
         { type: 'separator' },
         {
+          label: 'Upgrade to Premium...',
+          click: () => {
+            const licenseState = getCurrentLicenseState();
+
+            // If already premium, show confirmation
+            if (licenseState.state === 'premium') {
+              const { dialog } = require('electron');
+              dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'Premium Active',
+                message: 'You already have Premium!',
+                detail: 'Your premium license is active. Thank you for your support!',
+                buttons: ['OK']
+              });
+            } else {
+              // Show upgrade dialog
+              mainWindow.webContents.send('show-upgrade-dialog');
+            }
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'About ThymeSheet',
           click: () => {
             const { dialog } = require('electron');
+            const licenseState = getCurrentLicenseState();
+
+            let licenseInfo = '';
+            let buttons = ['Close'];
+
+            // Build license status message
+            if (licenseState.state === 'premium') {
+              licenseInfo = `\n\nLicense Status: Premium Active ⭐`;
+            } else if (licenseState.state === 'trial') {
+              licenseInfo = `\n\nLicense Status: Premium Trial\nTrial Expires: ${new Date(licenseState.trialEndsAt).toLocaleDateString()}\n(${licenseState.daysRemaining} day${licenseState.daysRemaining !== 1 ? 's' : ''} remaining)`;
+              buttons = ['Upgrade to Premium', 'Close'];
+            } else if (licenseState.state === 'trial_expired') {
+              licenseInfo = `\n\nLicense Status: Free Version\n(Trial ended)`;
+              buttons = ['Upgrade to Premium', 'Close'];
+            } else {
+              licenseInfo = `\n\nLicense Status: Free Version`;
+              buttons = ['Upgrade to Premium', 'Close'];
+            }
+
             dialog.showMessageBox(mainWindow, {
               type: 'info',
               title: 'About ThymeSheet',
               message: 'ThymeSheet',
-              detail: 'A professional time tracking application\n\nVersion 2.2.0'
+              detail: `A professional time tracking application\n\nVersion ${APP_VERSION}${licenseInfo}`,
+              buttons: buttons,
+              defaultId: buttons.length - 1,
+              cancelId: buttons.length - 1
+            }).then(result => {
+              // If user clicked "Upgrade to Premium" (button index 0)
+              if (result.response === 0 && buttons[0] === 'Upgrade to Premium') {
+                // Send message to renderer to show upgrade dialog
+                mainWindow.webContents.send('show-upgrade-dialog');
+              }
             });
           }
         }
@@ -706,11 +1008,13 @@ function createWindow() {
     isMainWindowMinimized = true;
     if (floatingTimerEnabled && floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
       showFloatingTimerWindow();
+      windowCycleState = 'floating';
     }
   });
 
   mainWindow.on('restore', () => {
     isMainWindowMinimized = false;
+    windowCycleState = 'main';
     if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
       hideFloatingTimerWindow();
     }
@@ -718,6 +1022,10 @@ function createWindow() {
 
   mainWindow.on('show', () => {
     isMainWindowMinimized = false;
+    // Only reset to main if window was actually hidden
+    if (windowCycleState === 'hidden') {
+      windowCycleState = 'main';
+    }
     if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
       hideFloatingTimerWindow();
     }
@@ -744,7 +1052,13 @@ function createTray() {
     {
       label: 'Show ThymeSheet',
       click: () => {
+        mainWindow.restore();
         mainWindow.show();
+        mainWindow.focus();
+        windowCycleState = 'main';
+        if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+          hideFloatingTimerWindow();
+        }
       }
     },
     {
@@ -768,7 +1082,18 @@ function createTray() {
   tray.setContextMenu(contextMenu);
 
   tray.on('double-click', () => {
-    mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
+    if (mainWindow.isVisible()) {
+      mainWindow.hide();
+      windowCycleState = 'hidden';
+    } else {
+      mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      windowCycleState = 'main';
+      if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+        hideFloatingTimerWindow();
+      }
+    }
   });
 
   // Listen for tray tooltip updates from renderer
@@ -923,31 +1248,88 @@ app.whenReady().then(() => {
   //   autoUpdater.checkForUpdates();
   // }, 3000);
 
-  // Register global hotkeys
+  // Register global hotkeys - 3-state cycling: main → floating → hidden → main
+  let isTogglingWindow = false;
   const ret = globalShortcut.register('CommandOrControl+Shift+Z', () => {
-    console.log('Hotkey triggered - Window visible:', mainWindow.isVisible(), 'Window focused:', mainWindow.isFocused());
+    // Prevent multiple rapid presses with shorter debounce
+    if (isTogglingWindow) {
+      console.log('Hotkey already processing, ignoring');
+      return;
+    }
 
-    if (mainWindow.isVisible() && mainWindow.isFocused()) {
-      // If window is visible and focused, hide it completely and show floating timer
-      console.log('Hiding window to show floating timer');
+    isTogglingWindow = true;
+    const startTime = Date.now();
+    console.log('Hotkey triggered - Current state:', windowCycleState);
+
+    if (windowCycleState === 'main') {
+      // State 1 → 2: Main window to floating popup at bottom right
+      console.log('Cycling: main → floating popup');
+      console.log('Floating timer enabled:', floatingTimerEnabled);
+      console.log('Floating timer window exists:', floatingTimerWindow ? 'yes' : 'no');
+
       mainWindow.hide();
       isMainWindowMinimized = true;
-      if (floatingTimerEnabled && floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+
+      // Show floating timer window in bottom right corner
+      if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+        console.log('Showing existing floating timer window');
         showFloatingTimerWindow();
+        console.log('Floating timer window visible:', floatingTimerWindow.isVisible());
+      } else if (floatingTimerEnabled) {
+        // Create floating window if it doesn't exist
+        console.log('Creating new floating timer window');
+        createFloatingTimerWindow();
+        if (floatingTimerWindow) {
+          console.log('Showing newly created floating timer window');
+          showFloatingTimerWindow();
+          console.log('Floating timer window visible:', floatingTimerWindow.isVisible());
+        } else {
+          console.log('ERROR: Failed to create floating timer window');
+        }
+      } else {
+        console.log('WARNING: Floating timer is disabled');
       }
+
+      windowCycleState = 'floating';
+    } else if (windowCycleState === 'floating') {
+      // State 2 → 3: Floating popup to completely hidden
+      console.log('Cycling: floating → hidden');
+      if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+        hideFloatingTimerWindow();
+      }
+      mainWindow.hide();
+      isMainWindowMinimized = true;
+      windowCycleState = 'hidden';
     } else {
-      // If window is hidden or not focused, show and focus it, hide floating timer
-      console.log('Showing and focusing window');
+      // State 3 → 1: Hidden to main window (maximized)
+      console.log('Cycling: hidden → main');
+
+      // Hide floating window first
+      if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+        hideFloatingTimerWindow();
+      }
+
+      // Show and focus main window
       mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
       mainWindow.setAlwaysOnTop(true);
-      mainWindow.setAlwaysOnTop(false); // This brings it to front
+      setTimeout(() => {
+        mainWindow.setAlwaysOnTop(false);
+      }, 100);
       isMainWindowMinimized = false;
-      if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
-        hideFloatingTimerWindow();
-      }
+      windowCycleState = 'main';
     }
+
+    // Reset flag immediately after state change completes
+    const elapsed = Date.now() - startTime;
+    console.log(`State transition completed in ${elapsed}ms`);
+
+    // Use shorter debounce - just enough to prevent double-triggers
+    setTimeout(() => {
+      isTogglingWindow = false;
+      console.log('Hotkey ready for next press');
+    }, 100);
   });
 
   const ret2 = globalShortcut.register('CommandOrControl+Shift+Space', () => {
@@ -964,11 +1346,24 @@ app.whenReady().then(() => {
   });
 
   if (!ret) {
-    console.log('Registration failed for Ctrl+Shift+Z');
+    console.log('ERROR: Registration failed for Ctrl+Shift+Z');
+  } else {
+    console.log('SUCCESS: Ctrl+Shift+Z hotkey registered');
   }
 
   if (!ret2) {
-    console.log('Registration failed for Ctrl+Shift+Space');
+    console.log('ERROR: Registration failed for Ctrl+Shift+Space');
+  } else {
+    console.log('SUCCESS: Ctrl+Shift+Space hotkey registered');
+  }
+
+  // Create floating timer window on startup (hidden initially)
+  console.log('Creating floating timer window...');
+  createFloatingTimerWindow();
+  if (floatingTimerWindow && !floatingTimerWindow.isDestroyed()) {
+    console.log('SUCCESS: Floating timer window created');
+  } else {
+    console.log('ERROR: Failed to create floating timer window');
   }
 });
 

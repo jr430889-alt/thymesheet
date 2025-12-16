@@ -1,0 +1,43 @@
+================================================================================
+                               CHANGELOG
+                  ThymeSheet Time Tracking Software
+================================================================================
+
+All notable changes to ThymeSheet will be documented in this file.
+
+================================================================================
+[1.0.0] - 2025-01-XX
+================================================================================
+
+INITIAL COMMERCIAL RELEASE
+
+ThymeSheet 1.0.0 is a professional time tracking application designed for
+consultants and professionals who need to track billable hours.
+
+KEY FEATURES
+- Track time with one-click start/stop timer
+- Organize projects by Client > Project > Task > Subtask
+- Export time entries to CSV for billing
+- Import projects from CSV files
+- Idle detection with auto-pause prompts
+- Daily goal tracking
+- Keyboard shortcuts for quick access
+- 100% offline - all data stored locally
+- Privacy-first - no data collection
+
+SYSTEM REQUIREMENTS
+- Windows 10 or Windows 11 (64-bit)
+- 2GB RAM minimum
+- 150MB disk space
+
+WHAT'S INCLUDED
+- Desktop application with system tray integration
+- Comprehensive user documentation
+- Automatic license activation
+- Manual update checking
+
+For complete documentation, see README.txt and FAQ.txt
+
+================================================================================
+
+© 2025 [LICENSOR_NAME]. All rights reserved.

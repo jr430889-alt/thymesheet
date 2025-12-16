@@ -1,0 +1,333 @@
+================================================================================
+                    FREQUENTLY ASKED QUESTIONS (FAQ)
+                      ThymeSheet Time Tracking Software
+================================================================================
+
+Version: 1.0.0
+Last Updated: November 26, 2025
+
+================================================================================
+INSTALLATION & SETUP
+================================================================================
+
+Q1: How do I install ThymeSheet?
+A: Download the ThymeSheet-Setup installer from the official download location,
+   run the installer, and follow the on-screen instructions. The installation
+   process takes less than a minute.
+
+Q2: Do I need administrator rights to install ThymeSheet?
+A: No, ThymeSheet installs to your user directory and does not require
+   administrator privileges.
+
+Q3: What operating systems does ThymeSheet support?
+A: ThymeSheet currently supports Windows 10 and Windows 11 (64-bit).
+
+Q4: Why does Windows show a security warning when I run the installer?
+A: This is normal for applications that are not code-signed with an expensive
+   certificate. ThymeSheet is safe to install. Click "More info" and then
+   "Run anyway" to proceed with installation.
+
+Q5: How much disk space does ThymeSheet require?
+A: ThymeSheet requires approximately 150MB of disk space for the application.
+   Your time tracking data files are very small (typically a few KB to a few MB
+   depending on usage).
+
+================================================================================
+LICENSE ACTIVATION
+================================================================================
+
+Q6: How do I activate my license?
+A: When you first launch ThymeSheet, it will automatically activate using an
+   embedded license key. Alternatively, if provided a license key separately,
+   you can enter it in the activation dialog.
+
+Q7: Do I need an internet connection to activate?
+A: No, ThymeSheet activation works completely offline. No internet connection
+   is required.
+
+Q8: Can I use my license on multiple computers?
+A: No. Each license is permanently bound to a single computer and cannot be
+   transferred, shared, or used on multiple devices. You would need a separate
+   license for each computer.
+
+Q9: What happens if I reinstall ThymeSheet on the same computer?
+A: Your license will automatically reactivate on the same computer. Your time
+   tracking data is also preserved during reinstallation.
+
+Q10: I'm getting a new computer. Can I transfer my license?
+A: Licenses are non-transferable. If you're replacing your computer, you'll
+   need a new license key for the new computer. Contact support for assistance
+   in exceptional circumstances.
+
+Q11: What if I upgrade my computer's hardware?
+A: Minor hardware changes (RAM, hard drive) typically won't affect your
+   license. Major changes (motherboard, network adapter) may require a new
+   license key. Contact support if you experience activation issues after
+   hardware changes.
+
+================================================================================
+USING THYMESHEET
+================================================================================
+
+Q12: How do I start tracking time?
+A: Select a project from the dropdown menu in the Track Time section, optionally
+   add a comment, and click the "Start" button (or press Enter). The timer will
+   begin counting immediately.
+
+Q13: Can I track time for multiple projects simultaneously?
+A: No, you can only track time for one project at a time. However, you can
+   quickly switch between projects by stopping the current timer and starting
+   a new one.
+
+Q14: Can I edit time entries after I've stopped the timer?
+A: Yes! In the Recent Time Entries section, click the edit icon (pencil) next
+   to any entry to modify the start time, end time, project, or comments.
+
+Q15: Can I manually add time entries for work I forgot to track?
+A: Yes, use the "Add Manual Time Entry" feature in the Track Time section to
+   add entries with custom start and end times.
+
+Q16: How do I delete a time entry?
+A: Click the delete icon (trash can) next to any entry in the Recent Time
+   Entries list. You'll be asked to confirm the deletion.
+
+================================================================================
+PROJECTS & DATA MANAGEMENT
+================================================================================
+
+Q17: How do I add projects to ThymeSheet?
+A: Go to the "Manage Projects" tab. You can either:
+   - Add projects manually using the "Add a project" form
+   - Import multiple projects from a CSV file
+   - Load demo data to try out the application
+
+Q18: Can I import my existing project list?
+A: Yes! ThymeSheet supports CSV import. Prepare a CSV file with columns:
+   Client Name, Project/Admin Name, Task Code, Subtask Code. Then use the
+   "Import Projects from CSV" feature.
+
+Q19: Can I organize projects by client?
+A: Yes! ThymeSheet uses a hierarchical structure: Client > Project > Task >
+   Subtask. You can filter and search by any of these levels.
+
+Q20: How do I export my time entries for billing?
+A: Go to "Manage Projects" and click "Export Time to CSV". You can export all
+   entries or filter by date range. The exported CSV file can be opened in
+   Excel or any spreadsheet application.
+
+Q21: What format is the exported data?
+A: Data is exported as CSV (Comma-Separated Values) format, which can be opened
+   in Excel, Google Sheets, or any spreadsheet application. The export includes
+   client name, project, task, start time, end time, duration, and comments.
+
+================================================================================
+DATA STORAGE & PRIVACY
+================================================================================
+
+Q22: Where is my data stored?
+A: All your time tracking data is stored locally on your computer in your
+   operating system's standard user documents folder. The exact location
+   depends on your OS, but is typically in a "ThymeSheet" folder.
+
+Q23: Is my data sent to any servers or cloud services?
+A: No. ThymeSheet operates completely offline. Your time tracking data never
+   leaves your computer. The only network activity is optional update checking.
+
+Q24: Does ThymeSheet collect any personal information?
+A: No. ThymeSheet does not collect your name, email, usage statistics, or any
+   personal information. The only data collected is hardware identifiers for
+   license activation (stored locally on your computer).
+
+Q25: How do I backup my time tracking data?
+A: You are responsible for backing up your data. We recommend:
+   - Regularly export your time entries to CSV
+   - Include your ThymeSheet data folder in your regular backup routine
+   - Copy the data files to a secure location or cloud storage of your choice
+
+Q26: What happens to my data if I uninstall ThymeSheet?
+A: Uninstalling ThymeSheet does NOT automatically delete your data. Your time
+   tracking data remains in the data folder and can be recovered if you
+   reinstall. To completely remove all data, you must manually delete the
+   data folder after uninstalling.
+
+Q27: Can I use ThymeSheet completely offline?
+A: Yes! ThymeSheet is designed to work 100% offline. The only optional online
+   feature is checking for software updates, which you can disable.
+
+================================================================================
+UPDATES & SUPPORT
+================================================================================
+
+Q28: How do I check for updates?
+A: Go to Help > Check for Updates in the menu bar. ThymeSheet will check if a
+   newer version is available and guide you through the update process if one
+   exists.
+
+Q29: Are updates automatic?
+A: No. ThymeSheet does not automatically download or install updates. You have
+   full control over when and if you update. This respects your system security
+   preferences.
+
+Q30: Will updating ThymeSheet delete my data?
+A: No. Your time tracking data is stored separately from the application and is
+   preserved across all updates.
+
+Q31: Do I need to pay for updates?
+A: Minor updates and bug fixes are free. Major version upgrades may require a
+   new license or additional fee, but this will be clearly communicated.
+
+Q32: How do I get help or report a bug?
+A: You can:
+   - Use the in-app Feedback button (Help menu)
+   - Email support at [YOUR_SUPPORT_EMAIL]
+   - Report issues on GitHub: https://github.com/jr430889-alt/thymesheet/issues
+
+Q33: What kind of support is provided?
+A: Support is provided on a best-effort basis via email and GitHub. We aim to
+   respond to all inquiries but cannot guarantee response times or resolution
+   of all issues.
+
+================================================================================
+FEATURES & FUNCTIONALITY
+================================================================================
+
+Q34: Can I set time rounding rules?
+A: Yes! Go to Settings and configure time rounding options (e.g., round to
+   nearest 15 minutes, 6 minutes for legal billing, etc.).
+
+Q35: Does ThymeSheet have idle detection?
+A: Yes! ThymeSheet can detect when you've been away from your computer and
+   prompt you to decide whether to keep or discard the idle time.
+
+Q36: Can I set a daily work hour goal?
+A: Yes! In Settings, you can set a daily goal (e.g., 8 hours) and ThymeSheet
+   will show your progress throughout the day.
+
+Q37: Are there keyboard shortcuts?
+A: Yes! Common shortcuts include:
+   - Ctrl+Shift+Z: Show/Hide window
+   - Ctrl+Shift+Space: Start/Stop timer
+   - Enter: Start tracking selected project
+   - Space: Pause/Resume timer
+   - 1-9: Quick select recent projects
+
+Q38: Can I minimize ThymeSheet to the system tray?
+A: Yes! ThymeSheet minimizes to the system tray (notification area) when you
+   close the window. Right-click the tray icon to access quick actions or
+   double-click to restore the window.
+
+Q39: Can I have the timer visible while working in other applications?
+A: Yes! Enable the "Floating Timer" feature in Settings to display a small
+   timer window that stays on top of other applications.
+
+Q40: Can I track break times or non-billable activities?
+A: Yes! Simply create projects for breaks or non-billable activities (e.g.,
+   "Break - Lunch", "Admin - Email") and track time against them. You can
+   filter these out when exporting for billing.
+
+================================================================================
+BILLING & PROFESSIONAL USE
+================================================================================
+
+Q41: Can I use ThymeSheet for billable client work?
+A: Yes! ThymeSheet is designed for consultants and professionals tracking
+   billable hours. However, you are responsible for verifying the accuracy of
+   all time entries before billing clients.
+
+Q42: Is the time tracking data accurate enough for billing?
+A: ThymeSheet tracks time accurately, but like any time tracking tool, you
+   should review entries before submitting invoices. The software does not
+   guarantee 100% accuracy and you are responsible for verifying all data.
+
+Q43: Can I track time for multiple clients?
+A: Yes! The hierarchical structure (Client > Project > Task > Subtask) is
+   specifically designed for managing multiple clients and projects.
+
+Q44: Can I generate invoices with ThymeSheet?
+A: ThymeSheet exports time data to CSV format which can be imported into
+   invoicing software or used to manually create invoices. ThymeSheet itself
+   does not generate invoices.
+
+Q45: What happens if there's an error in my time tracking that affects client
+     billing?
+A: You are solely responsible for the accuracy of your billing. Always review
+   exported time entries before submitting to clients. ThymeSheet's license
+   agreement limits liability for billing errors.
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Q46: ThymeSheet won't start. What should I do?
+A: Try these steps:
+   1. Restart your computer
+   2. Reinstall ThymeSheet
+   3. Check if antivirus software is blocking the application
+   4. Contact support with details about any error messages
+
+Q47: My time entries disappeared. How do I recover them?
+A: Time entries are stored locally. Check if:
+   1. You're looking at the correct date range (use the filter)
+   2. Your data file wasn't accidentally deleted
+   3. You have a backup of your data folder
+   If data is lost and you have no backup, it cannot be recovered.
+
+Q48: The timer keeps running even when I'm away. What's wrong?
+A: Check your "Auto-Pause Detection" settings. You can configure ThymeSheet to
+   detect idle time and prompt you to discard it.
+
+Q49: I can't find my exported CSV file. Where did it go?
+A: When you export, you choose the save location. Check your Downloads folder
+   or the location you selected during export. The default filename includes
+   the date.
+
+Q50: Can I merge duplicate time entries?
+A: ThymeSheet does not have an automatic merge feature. You would need to
+   manually delete duplicates and create a new consolidated entry.
+
+================================================================================
+ADVANCED QUESTIONS
+================================================================================
+
+Q51: Can I sync ThymeSheet data across multiple computers?
+A: No, ThymeSheet does not include built-in sync functionality. Each license
+   works on one computer only. However, you can manually export/import data
+   between computers if needed (though this would require separate licenses
+   for each computer).
+
+Q52: Can I customize the application interface or theme?
+A: The current version uses a fixed professional interface. Customization
+   options may be added in future updates.
+
+Q53: Does ThymeSheet integrate with other tools (Jira, Asana, etc.)?
+A: Not currently. ThymeSheet is a standalone application. However, you can
+   export data to CSV and import it into other tools that support CSV import.
+
+Q54: Can I run ThymeSheet from a USB drive (portable version)?
+A: The current version is designed for standard installation. A portable
+   version may be considered for future releases.
+
+Q55: Is there a mobile version of ThymeSheet?
+A: Not currently. ThymeSheet is a desktop application for Windows. Mobile
+   versions may be considered for future development.
+
+================================================================================
+CONTACT & ADDITIONAL HELP
+================================================================================
+
+If your question isn't answered here:
+
+- Email: [YOUR_SUPPORT_EMAIL]
+- GitHub: https://github.com/jr430889-alt/thymesheet/issues
+- Documentation: See README.txt and GETTING-STARTED.md files
+- In-App Feedback: Click Help > Send Feedback
+
+We're here to help you make the most of ThymeSheet!
+
+================================================================================
+
+© 2025 [LICENSOR_NAME]. All rights reserved.
+
+This FAQ was last updated on November 26, 2025.
+
+================================================================================
