@@ -1150,16 +1150,32 @@ app.whenReady().then(() => {
   });
 
   // IPC handlers for update actions
-  ipcMain.handle('download-update', () => {
-    autoUpdater.downloadUpdate();
+  ipcMain.handle('download-update', async () => {
+    try {
+      return await autoUpdater.downloadUpdate();
+    } catch (error) {
+      console.error('Error downloading update:', error);
+      throw error;
+    }
   });
 
   ipcMain.handle('install-update', () => {
-    autoUpdater.quitAndInstall(false, true);
+    try {
+      autoUpdater.quitAndInstall(false, true);
+      return { success: true };
+    } catch (error) {
+      console.error('Error installing update:', error);
+      throw error;
+    }
   });
 
-  ipcMain.handle('check-for-updates', () => {
-    autoUpdater.checkForUpdates();
+  ipcMain.handle('check-for-updates', async () => {
+    try {
+      return await autoUpdater.checkForUpdates();
+    } catch (error) {
+      console.error('Error checking for updates:', error);
+      throw error;
+    }
   });
 
   // System power monitor for idle detection
