@@ -40,11 +40,228 @@ let tray;
 const userDataPath = path.join(app.getPath('documents'), 'ThymeSheet');
 const dataFilePath = path.join(userDataPath, 'thymesheet-data.json');
 const licenseFilePath = path.join(userDataPath, 'thymesheet-license.dat');
+const settingsFilePath = path.join(userDataPath, 'thymesheet-settings.json');
+const errorLogFilePath = path.join(userDataPath, 'thymesheet-error-log.txt');
+
+// Load settings (including custom backup location)
+let settings = {
+  customBackupPath: null
+};
+
+if (fs.existsSync(settingsFilePath)) {
+  try {
+    settings = JSON.parse(fs.readFileSync(settingsFilePath, 'utf8'));
+  } catch (error) {
+    console.error('Failed to load settings:', error);
+  }
+}
+
+// Use custom backup path if set, otherwise use default
+const backupPath = settings.customBackupPath || path.join(userDataPath, 'backups');
 
 // Ensure data directory exists
 if (!fs.existsSync(userDataPath)) {
   fs.mkdirSync(userDataPath, { recursive: true });
 }
+
+// Ensure backup directory exists
+if (!fs.existsSync(backupPath)) {
+  fs.mkdirSync(backupPath, { recursive: true });
+}
+
+// ==================== ERROR LOGGING SYSTEM ====================
+function logError(location, errorType, errorMessage, errorStack = null) {
+  try {
+    const timestamp = new Date().toISOString();
+    const logEntry = `
+========================================
+[${timestamp}]
+Location: ${location}
+Error Type: ${errorType}
+Message: ${errorMessage}
+${errorStack ? `Stack Trace:\n${errorStack}` : ''}
+App Version: ${APP_VERSION}
+Platform: ${os.platform()} ${os.release()}
+Node Version: ${process.version}
+Electron Version: ${process.versions.electron}
+========================================
+`;
+
+    fs.appendFileSync(errorLogFilePath, logEntry, 'utf8');
+    console.error(`[ERROR LOGGED] ${location}: ${errorMessage}`);
+  } catch (err) {
+    console.error('Failed to write to error log:', err);
+  }
+}
+
+function logInfo(location, message) {
+  try {
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] [INFO] ${location}: ${message}\n`;
+    fs.appendFileSync(errorLogFilePath, logEntry, 'utf8');
+  } catch (err) {
+    console.error('Failed to write info to log:', err);
+  }
+}
+
+// Catch unhandled errors
+process.on('uncaughtException', (error) => {
+  logError('Uncaught Exception', error.name, error.message, error.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logError('Unhandled Promise Rejection', 'Promise', String(reason), reason?.stack);
+});
+
+// Log app start
+logInfo('App Startup', `ThymeSheet v${APP_VERSION} started`);
+// ==================== END ERROR LOGGING SYSTEM ====================
+
+// ==================== BACKUP LOCATION SELECTOR ====================
+async function showBackupLocationDialog() {
+  const result = await dialog.showMessageBox({
+    type: 'question',
+    title: 'Choose Backup Location',
+    message: 'Welcome to ThymeSheet!',
+    detail: 'Where would you like to save your backup files?\n\nBackups include:\n• Daily JSON backups (30 days)\n• Daily CSV exports (90 days)\n• Master CSV backup (real-time)',
+    buttons: ['Default Location', 'Choose Custom Location'],
+    defaultId: 0,
+    cancelId: 0
+  });
+
+  if (result.response === 1) {
+    // User wants to choose custom location
+    const folderResult = await dialog.showOpenDialog({
+      title: 'Select Backup Folder',
+      properties: ['openDirectory', 'createDirectory'],
+      defaultPath: app.getPath('documents')
+    });
+
+    if (!folderResult.canceled && folderResult.filePaths.length > 0) {
+      const selectedPath = path.join(folderResult.filePaths[0], 'ThymeSheet-Backups');
+
+      // Save custom path to settings
+      settings.customBackupPath = selectedPath;
+      fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+
+      // Create the backup directory
+      if (!fs.existsSync(selectedPath)) {
+        fs.mkdirSync(selectedPath, { recursive: true });
+      }
+
+      logInfo('Backup Location', `Custom backup location set: ${selectedPath}`);
+
+      return selectedPath;
+    }
+  }
+
+  // Default location
+  const defaultPath = path.join(userDataPath, 'backups');
+  logInfo('Backup Location', `Using default backup location: ${defaultPath}`);
+  return defaultPath;
+}
+
+// Check if this is first run (no settings file exists)
+async function checkFirstRun() {
+  if (!fs.existsSync(settingsFilePath)) {
+    logInfo('First Run', 'First run detected, showing backup location selector');
+    const chosenPath = await showBackupLocationDialog();
+
+    // Update settings with chosen path (or keep default if none chosen)
+    if (settings.customBackupPath === null && chosenPath !== path.join(userDataPath, 'backups')) {
+      settings.customBackupPath = chosenPath;
+      fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+    } else if (!settings.customBackupPath) {
+      // Save settings file even with null backup path to mark first run complete
+      fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+    }
+  }
+}
+// ==================== END BACKUP LOCATION SELECTOR ====================
+
+// Create automatic daily backup
+function createDailyBackup() {
+  try {
+    if (fs.existsSync(dataFilePath)) {
+      const data = fs.readFileSync(dataFilePath, 'utf8');
+      const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const backupFile = path.join(backupPath, `thymesheet-data-${timestamp}.json`);
+
+      // Only create backup if data has changed or doesn't exist for today
+      if (!fs.existsSync(backupFile)) {
+        fs.writeFileSync(backupFile, data);
+        logInfo('Daily Backup', `Backup created: ${backupFile}`);
+      }
+
+      // Clean up old backups (keep last 30 days)
+      const backupFiles = fs.readdirSync(backupPath)
+        .filter(f => f.startsWith('thymesheet-data-') && f.endsWith('.json'))
+        .sort()
+        .reverse();
+
+      if (backupFiles.length > 30) {
+        backupFiles.slice(30).forEach(oldFile => {
+          fs.unlinkSync(path.join(backupPath, oldFile));
+        });
+      }
+    }
+  } catch (error) {
+    logError('Daily Backup', 'BackupError', error.message, error.stack);
+  }
+}
+
+// Create automatic Excel/CSV backup
+function createDailyExcelBackup() {
+  try {
+    if (fs.existsSync(dataFilePath)) {
+      const data = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const csvBackupFile = path.join(backupPath, `thymesheet-backup-${timestamp}.csv`);
+
+      // Only create backup if data has changed or doesn't exist for today
+      if (!fs.existsSync(csvBackupFile) && data.timeEntries && data.timeEntries.length > 0) {
+        // Create CSV content
+        let csvContent = 'Date,Client,Project,Code,Start Time,End Time,Hours,Notes\n';
+
+        data.timeEntries.forEach(entry => {
+          const client = data.projectCodes.find(p => p.id === entry.projectId)?.clientName || 'Unknown';
+          const project = entry.projectDescription || 'Unknown';
+          const code = entry.projectCode || '';
+          const notes = (entry.notes || '').replace(/"/g, '""'); // Escape quotes
+
+          csvContent += `"${entry.date}","${client}","${project}","${code}","${entry.startTime}","${entry.endTime}","${entry.hours}","${notes}"\n`;
+        });
+
+        fs.writeFileSync(csvBackupFile, csvContent);
+        logInfo('Daily CSV Backup', `CSV backup created: ${csvBackupFile}`);
+      }
+
+      // Clean up old CSV backups (keep last 90 days)
+      const csvBackupFiles = fs.readdirSync(backupPath)
+        .filter(f => f.startsWith('thymesheet-backup-') && f.endsWith('.csv'))
+        .sort()
+        .reverse();
+
+      if (csvBackupFiles.length > 90) {
+        csvBackupFiles.slice(90).forEach(oldFile => {
+          fs.unlinkSync(path.join(backupPath, oldFile));
+        });
+      }
+    }
+  } catch (error) {
+    logError('Daily CSV Backup', 'BackupError', error.message, error.stack);
+  }
+}
+
+// Create backup on app start
+createDailyBackup();
+createDailyExcelBackup();
+
+// Create backup every 6 hours
+setInterval(() => {
+  createDailyBackup();
+  createDailyExcelBackup();
+}, 6 * 60 * 60 * 1000);
 
 // Get hardware ID for license binding
 function getHardwareId() {
@@ -452,13 +669,108 @@ ipcMain.handle('load-data', () => {
   }
 });
 
+// Real-time CSV backup function - called on EVERY data save
+function updateMasterCSVBackup(data) {
+  try {
+    // Primary CSV backup in same folder as JSON
+    const primaryCSV = path.join(userDataPath, 'MASTER-TIMESHEET-BACKUP.csv');
+
+    // Secondary CSV backup in OneDrive Documents root (extra safety)
+    const secondaryCSV = path.join(app.getPath('documents'), 'THYMESHEET-MASTER-BACKUP.csv');
+
+    if (data.timeEntries && data.timeEntries.length > 0) {
+      // Create CSV with ALL details including comments
+      let csvContent = 'Date,Client,Project,Task Code,Start Time,End Time,Hours,Comments/Notes\n';
+
+      data.timeEntries
+        .sort((a, b) => a.date.localeCompare(b.date)) // Sort by date
+        .forEach(entry => {
+          const projectInfo = data.projectCodes?.find(p => p.id === entry.projectId);
+          const client = projectInfo?.clientName || 'Unknown';
+          const project = entry.projectDescription || projectInfo?.projectName || 'Unknown';
+          const code = entry.projectCode || '';
+          const notes = (entry.notes || '').replace(/"/g, '""'); // Escape quotes for CSV
+          const startTime = entry.startTime || '';
+          const endTime = entry.endTime || '';
+
+          csvContent += `"${entry.date}","${client}","${project}","${code}","${startTime}","${endTime}","${entry.hours}","${notes}"\n`;
+        });
+
+      // Write to PRIMARY location (same folder as JSON)
+      fs.writeFileSync(primaryCSV, csvContent, 'utf8');
+
+      // Write to SECONDARY location (OneDrive root - extra safety)
+      try {
+        fs.writeFileSync(secondaryCSV, csvContent, 'utf8');
+      } catch (err) {
+        console.warn('Could not write secondary CSV backup:', err.message);
+      }
+
+      logInfo('Master CSV Backup', `Updated with ${data.timeEntries.length} entries`);
+    }
+  } catch (error) {
+    logError('Master CSV Backup', 'BackupError', error.message, error.stack);
+    // Don't fail the save if CSV backup fails
+  }
+}
+
+// REDUNDANT BACKUP TRIGGER #1: On every save
 ipcMain.handle('save-data', (event, data) => {
   try {
+    // Save JSON file
     fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf8');
+
+    // IMMEDIATELY update master CSV backup (real-time)
+    updateMasterCSVBackup(data);
+
     return { success: true };
   } catch (error) {
     console.error('Error saving data:', error);
     return { success: false, error: error.message };
+  }
+});
+
+// REDUNDANT BACKUP TRIGGER #2: Watch for JSON file changes (independent of app)
+let csvBackupWatcher = null;
+try {
+  csvBackupWatcher = fs.watch(dataFilePath, (eventType, filename) => {
+    if (eventType === 'change') {
+      try {
+        const data = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+        updateMasterCSVBackup(data);
+        console.log('✓ Backup watchdog triggered CSV update');
+      } catch (err) {
+        console.error('Watchdog backup failed:', err);
+      }
+    }
+  });
+} catch (error) {
+  console.error('Could not setup backup watchdog:', error);
+}
+
+// REDUNDANT BACKUP TRIGGER #3: Periodic safety backup (every 5 minutes)
+setInterval(() => {
+  try {
+    if (fs.existsSync(dataFilePath)) {
+      const data = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      updateMasterCSVBackup(data);
+      console.log('✓ Periodic safety backup completed');
+    }
+  } catch (error) {
+    console.error('Periodic backup failed:', error);
+  }
+}, 5 * 60 * 1000); // 5 minutes
+
+// REDUNDANT BACKUP TRIGGER #4: On app close
+app.on('before-quit', () => {
+  try {
+    if (fs.existsSync(dataFilePath)) {
+      const data = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      updateMasterCSVBackup(data);
+      console.log('✓ Exit backup completed');
+    }
+  } catch (error) {
+    console.error('Exit backup failed:', error);
   }
 });
 
@@ -559,6 +871,160 @@ ipcMain.handle('browse-csv-file', async () => {
     };
   }
 });
+
+// ==================== ERROR LOG IPC HANDLERS ====================
+ipcMain.handle('get-error-log', () => {
+  try {
+    if (fs.existsSync(errorLogFilePath)) {
+      const logContent = fs.readFileSync(errorLogFilePath, 'utf8');
+      return {
+        success: true,
+        content: logContent,
+        path: errorLogFilePath
+      };
+    } else {
+      return {
+        success: true,
+        content: 'No errors logged yet.',
+        path: errorLogFilePath
+      };
+    }
+  } catch (error) {
+    logError('Get Error Log', 'ReadError', error.message, error.stack);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('export-error-log', async () => {
+  try {
+    if (!fs.existsSync(errorLogFilePath)) {
+      return {
+        success: false,
+        error: 'No error log file exists yet.'
+      };
+    }
+
+    const result = await dialog.showSaveDialog({
+      title: 'Export Error Log',
+      defaultPath: `ThymeSheet-ErrorLog-${new Date().toISOString().split('T')[0]}.txt`,
+      filters: [
+        { name: 'Text Files', extensions: ['txt'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (!result.canceled && result.filePath) {
+      fs.copyFileSync(errorLogFilePath, result.filePath);
+      logInfo('Error Log Export', `Error log exported to: ${result.filePath}`);
+      return {
+        success: true,
+        path: result.filePath
+      };
+    } else {
+      return {
+        success: false,
+        error: 'Export canceled'
+      };
+    }
+  } catch (error) {
+    logError('Export Error Log', 'ExportError', error.message, error.stack);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('clear-error-log', () => {
+  try {
+    if (fs.existsSync(errorLogFilePath)) {
+      fs.unlinkSync(errorLogFilePath);
+      logInfo('Error Log', 'Error log cleared by user');
+    }
+    return { success: true };
+  } catch (error) {
+    logError('Clear Error Log', 'ClearError', error.message, error.stack);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('open-error-log-folder', () => {
+  try {
+    require('electron').shell.showItemInFolder(errorLogFilePath);
+    return { success: true };
+  } catch (error) {
+    logError('Open Error Log Folder', 'OpenError', error.message, error.stack);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('get-backup-location', () => {
+  return {
+    success: true,
+    backupPath: backupPath,
+    isCustom: settings.customBackupPath !== null
+  };
+});
+
+ipcMain.handle('change-backup-location', async () => {
+  try {
+    const folderResult = await dialog.showOpenDialog({
+      title: 'Select New Backup Folder',
+      properties: ['openDirectory', 'createDirectory'],
+      defaultPath: backupPath
+    });
+
+    if (!folderResult.canceled && folderResult.filePaths.length > 0) {
+      const newPath = path.join(folderResult.filePaths[0], 'ThymeSheet-Backups');
+
+      // Create the new backup directory
+      if (!fs.existsSync(newPath)) {
+        fs.mkdirSync(newPath, { recursive: true });
+      }
+
+      // Update settings
+      settings.customBackupPath = newPath;
+      fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+
+      logInfo('Backup Location Change', `Backup location changed to: ${newPath}`);
+
+      // Prompt user to restart app
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Restart Required',
+        message: 'Backup location changed successfully!',
+        detail: 'Please restart ThymeSheet for the changes to take effect.\n\nNew backup location:\n' + newPath,
+        buttons: ['OK']
+      });
+
+      return {
+        success: true,
+        newPath: newPath
+      };
+    } else {
+      return {
+        success: false,
+        error: 'No folder selected'
+      };
+    }
+  } catch (error) {
+    logError('Change Backup Location', 'ChangeError', error.message, error.stack);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+// ==================== END ERROR LOG IPC HANDLERS ====================
 
 // Floating timer window functions
 function createFloatingTimerWindow() {
@@ -798,11 +1264,229 @@ function createWindow() {
             mainWindow.webContents.send('import-data-request');
           }
         },
+        {
+          label: 'Import from Backup...',
+          accelerator: 'CommandOrControl+Shift+I',
+          click: async () => {
+            try {
+              // Show file picker for CSV backup files
+              const result = await dialog.showOpenDialog(mainWindow, {
+                title: 'Select CSV Backup File to Import',
+                defaultPath: backupPath,
+                filters: [
+                  { name: 'CSV Backups', extensions: ['csv'] },
+                  { name: 'All Files', extensions: ['*'] }
+                ],
+                properties: ['openFile']
+              });
+
+              if (result.canceled || result.filePaths.length === 0) {
+                return;
+              }
+
+              const backupFile = result.filePaths[0];
+              const ext = path.extname(backupFile).toLowerCase();
+
+              if (ext !== '.csv') {
+                dialog.showMessageBox(mainWindow, {
+                  type: 'error',
+                  title: 'Unsupported File Type',
+                  message: 'Please select a CSV backup file (.csv)',
+                  detail: 'Only CSV backup files can be imported.\n\nLook for files like:\n• MASTER-TIMESHEET-BACKUP.csv\n• thymesheet-backup-[date].csv',
+                  buttons: ['OK']
+                });
+                return;
+              }
+
+              // Confirm before importing (will overwrite current data)
+              const confirmResult = await dialog.showMessageBox(mainWindow, {
+                type: 'warning',
+                title: 'Import Backup?',
+                message: 'This will replace ALL current data with the backup.',
+                detail: `Are you sure you want to import from:\n${path.basename(backupFile)}\n\nYour current data will be backed up automatically before importing.`,
+                buttons: ['Import Backup', 'Cancel'],
+                defaultId: 1,
+                cancelId: 1
+              });
+
+              if (confirmResult.response !== 0) {
+                return;
+              }
+
+              // Create a backup of current data before importing
+              const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+              const safetyBackup = path.join(backupPath, `pre-import-backup-${timestamp}.json`);
+              const safetyBackupCSV = path.join(backupPath, `pre-import-backup-${timestamp}.csv`);
+
+              if (fs.existsSync(dataFilePath)) {
+                fs.copyFileSync(dataFilePath, safetyBackup);
+                logInfo('Backup Import', `Safety backup created: ${safetyBackup}`);
+              }
+
+              // Also backup current master CSV
+              const currentMasterCSV = path.join(userDataPath, 'MASTER-TIMESHEET-BACKUP.csv');
+              if (fs.existsSync(currentMasterCSV)) {
+                fs.copyFileSync(currentMasterCSV, safetyBackupCSV);
+              }
+
+              // Read and parse CSV file
+              const csvContent = fs.readFileSync(backupFile, 'utf8');
+              const lines = csvContent.split('\n').filter(line => line.trim());
+
+              if (lines.length < 2) {
+                dialog.showMessageBox(mainWindow, {
+                  type: 'error',
+                  title: 'Empty Backup',
+                  message: 'The backup file is empty or invalid.',
+                  buttons: ['OK']
+                });
+                return;
+              }
+
+              // Parse CSV (skip header row)
+              const timeEntries = [];
+              const projectCodesMap = new Map();
+              let projectIdCounter = 1;
+
+              for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                // Parse CSV line (handle quoted fields)
+                const fields = [];
+                let currentField = '';
+                let inQuotes = false;
+
+                for (let j = 0; j < line.length; j++) {
+                  const char = line[j];
+
+                  if (char === '"') {
+                    if (inQuotes && line[j + 1] === '"') {
+                      // Escaped quote
+                      currentField += '"';
+                      j++;
+                    } else {
+                      // Toggle quote state
+                      inQuotes = !inQuotes;
+                    }
+                  } else if (char === ',' && !inQuotes) {
+                    // Field separator
+                    fields.push(currentField);
+                    currentField = '';
+                  } else {
+                    currentField += char;
+                  }
+                }
+                fields.push(currentField); // Add last field
+
+                if (fields.length < 7) continue; // Skip invalid lines
+
+                const [date, client, project, taskCode, startTime, endTime, hours, notes] = fields;
+
+                // Create or find project code
+                const projectKey = `${client}|${project}|${taskCode}`;
+                let projectId;
+
+                if (projectCodesMap.has(projectKey)) {
+                  projectId = projectCodesMap.get(projectKey);
+                } else {
+                  projectId = `proj-${projectIdCounter++}`;
+                  projectCodesMap.set(projectKey, projectId);
+                }
+
+                // Create time entry
+                timeEntries.push({
+                  id: `entry-${Date.now()}-${i}`,
+                  date: date,
+                  projectId: projectId,
+                  projectCode: taskCode,
+                  projectDescription: project,
+                  startTime: startTime,
+                  endTime: endTime,
+                  hours: parseFloat(hours) || 0,
+                  notes: notes || ''
+                });
+              }
+
+              // Create project codes array
+              const projectCodes = [];
+              projectCodesMap.forEach((projectId, projectKey) => {
+                const [client, project, taskCode] = projectKey.split('|');
+                projectCodes.push({
+                  id: projectId,
+                  code: taskCode,
+                  clientName: client,
+                  projectName: project,
+                  description: ''
+                });
+              });
+
+              // Load existing data to preserve settings
+              let existingData = {
+                timeEntries: [],
+                projectCodes: [],
+                settings: {},
+                invoiceProfiles: []
+              };
+
+              if (fs.existsSync(dataFilePath)) {
+                try {
+                  existingData = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+                } catch (err) {
+                  // If can't read existing, use defaults
+                }
+              }
+
+              // Create new data structure (preserve settings and invoice profiles)
+              const newData = {
+                timeEntries: timeEntries,
+                projectCodes: projectCodes,
+                settings: existingData.settings || {},
+                invoiceProfiles: existingData.invoiceProfiles || []
+              };
+
+              // Write to data file
+              fs.writeFileSync(dataFilePath, JSON.stringify(newData, null, 2), 'utf8');
+
+              logInfo('Backup Import', `Successfully imported CSV backup: ${backupFile} (${timeEntries.length} entries)`);
+
+              dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'Import Complete',
+                message: 'Backup imported successfully!',
+                detail: `Imported ${timeEntries.length} time entries.\n\nPlease restart ThymeSheet to load the imported data.`,
+                buttons: ['Restart Now', 'Restart Later']
+              }).then(result => {
+                if (result.response === 0) {
+                  app.relaunch();
+                  app.quit();
+                }
+              });
+
+            } catch (error) {
+              logError('Backup Import', 'ImportError', error.message, error.stack);
+
+              dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Import Failed',
+                message: 'Failed to import backup.',
+                detail: `Error: ${error.message}\n\nPlease make sure the CSV file is a valid ThymeSheet backup.`,
+                buttons: ['OK']
+              });
+            }
+          }
+        },
         { type: 'separator' },
         {
           label: 'Show Data Folder',
           click: () => {
             require('electron').shell.openPath(userDataPath);
+          }
+        },
+        {
+          label: 'Show Backup Folder',
+          click: () => {
+            require('electron').shell.openPath(backupPath);
           }
         },
         { type: 'separator' },
@@ -914,6 +1598,168 @@ function createWindow() {
           click: () => {
             mainWindow.webContents.send('show-guide');
           }
+        },
+        { type: 'separator' },
+        {
+          label: 'Backup Location',
+          submenu: [
+            {
+              label: 'View Backup Folder',
+              click: () => {
+                require('electron').shell.openPath(backupPath);
+              }
+            },
+            {
+              label: 'Change Backup Location...',
+              click: async () => {
+                const folderResult = await dialog.showOpenDialog(mainWindow, {
+                  title: 'Select New Backup Folder',
+                  properties: ['openDirectory', 'createDirectory'],
+                  defaultPath: backupPath
+                });
+
+                if (!folderResult.canceled && folderResult.filePaths.length > 0) {
+                  const newPath = path.join(folderResult.filePaths[0], 'ThymeSheet-Backups');
+
+                  // Create the new backup directory
+                  if (!fs.existsSync(newPath)) {
+                    fs.mkdirSync(newPath, { recursive: true });
+                  }
+
+                  // Update settings
+                  settings.customBackupPath = newPath;
+                  fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+
+                  logInfo('Backup Location Change', `Backup location changed to: ${newPath}`);
+
+                  dialog.showMessageBox(mainWindow, {
+                    type: 'info',
+                    title: 'Restart Required',
+                    message: 'Backup location changed successfully!',
+                    detail: `Please restart ThymeSheet for the changes to take effect.\n\nNew backup location:\n${newPath}`,
+                    buttons: ['OK']
+                  });
+                }
+              }
+            },
+            {
+              label: 'Current Location Info',
+              click: () => {
+                const isCustom = settings.customBackupPath !== null;
+                const locationInfo = isCustom
+                  ? `Custom Location:\n${backupPath}`
+                  : `Default Location:\n${backupPath}`;
+
+                dialog.showMessageBox(mainWindow, {
+                  type: 'info',
+                  title: 'Backup Location',
+                  message: 'Current Backup Location',
+                  detail: locationInfo,
+                  buttons: ['Open Folder', 'Close']
+                }).then(result => {
+                  if (result.response === 0) {
+                    require('electron').shell.openPath(backupPath);
+                  }
+                });
+              }
+            }
+          ]
+        },
+        {
+          label: 'Error Log',
+          submenu: [
+            {
+              label: 'View Error Log',
+              click: () => {
+                if (fs.existsSync(errorLogFilePath)) {
+                  require('electron').shell.openPath(errorLogFilePath);
+                } else {
+                  dialog.showMessageBox(mainWindow, {
+                    type: 'info',
+                    title: 'No Errors',
+                    message: 'No errors have been logged yet.',
+                    detail: 'The error log will be created automatically when errors occur.\n\nThis is a good thing - it means everything is working properly!',
+                    buttons: ['OK']
+                  });
+                }
+              }
+            },
+            {
+              label: 'Export Error Log...',
+              click: async () => {
+                if (!fs.existsSync(errorLogFilePath)) {
+                  dialog.showMessageBox(mainWindow, {
+                    type: 'info',
+                    title: 'No Error Log',
+                    message: 'No error log file exists yet.',
+                    detail: 'The error log will be created automatically when errors occur.',
+                    buttons: ['OK']
+                  });
+                  return;
+                }
+
+                const result = await dialog.showSaveDialog(mainWindow, {
+                  title: 'Export Error Log',
+                  defaultPath: `ThymeSheet-ErrorLog-${new Date().toISOString().split('T')[0]}.txt`,
+                  filters: [
+                    { name: 'Text Files', extensions: ['txt'] },
+                    { name: 'All Files', extensions: ['*'] }
+                  ]
+                });
+
+                if (!result.canceled && result.filePath) {
+                  fs.copyFileSync(errorLogFilePath, result.filePath);
+                  logInfo('Error Log Export', `Error log exported to: ${result.filePath}`);
+
+                  dialog.showMessageBox(mainWindow, {
+                    type: 'info',
+                    title: 'Export Complete',
+                    message: 'Error log exported successfully!',
+                    detail: `Saved to:\n${result.filePath}\n\nYou can now send this file for troubleshooting.`,
+                    buttons: ['Open File', 'Close']
+                  }).then(result => {
+                    if (result.response === 0) {
+                      require('electron').shell.openPath(result.filePath);
+                    }
+                  });
+                }
+              }
+            },
+            {
+              label: 'Clear Error Log',
+              click: () => {
+                if (fs.existsSync(errorLogFilePath)) {
+                  dialog.showMessageBox(mainWindow, {
+                    type: 'warning',
+                    title: 'Clear Error Log?',
+                    message: 'Are you sure you want to clear the error log?',
+                    detail: 'This will permanently delete all logged errors. This action cannot be undone.',
+                    buttons: ['Clear Log', 'Cancel'],
+                    defaultId: 1,
+                    cancelId: 1
+                  }).then(result => {
+                    if (result.response === 0) {
+                      fs.unlinkSync(errorLogFilePath);
+                      logInfo('Error Log', 'Error log cleared by user');
+                      dialog.showMessageBox(mainWindow, {
+                        type: 'info',
+                        title: 'Log Cleared',
+                        message: 'Error log has been cleared successfully.',
+                        buttons: ['OK']
+                      });
+                    }
+                  });
+                } else {
+                  dialog.showMessageBox(mainWindow, {
+                    type: 'info',
+                    title: 'No Error Log',
+                    message: 'There is no error log to clear.',
+                    buttons: ['OK']
+                  });
+                }
+              }
+            }
+          ]
         },
         { type: 'separator' },
         {
@@ -1070,6 +1916,113 @@ function createTray() {
     },
     { type: 'separator' },
     {
+      label: 'Backup Location',
+      submenu: [
+        {
+          label: 'View Current Location',
+          click: () => {
+            require('electron').shell.openPath(backupPath);
+          }
+        },
+        {
+          label: 'Change Backup Location',
+          click: async () => {
+            await dialog.showOpenDialog({
+              title: 'Select New Backup Folder',
+              properties: ['openDirectory', 'createDirectory'],
+              defaultPath: backupPath
+            }).then(result => {
+              if (!result.canceled && result.filePaths.length > 0) {
+                const newPath = path.join(result.filePaths[0], 'ThymeSheet-Backups');
+                if (!fs.existsSync(newPath)) {
+                  fs.mkdirSync(newPath, { recursive: true });
+                }
+                settings.customBackupPath = newPath;
+                fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+                logInfo('Backup Location Change', `Backup location changed to: ${newPath}`);
+                dialog.showMessageBox({
+                  type: 'info',
+                  title: 'Restart Required',
+                  message: 'Backup location changed successfully!',
+                  detail: 'Please restart ThymeSheet for the changes to take effect.\n\nNew backup location:\n' + newPath,
+                  buttons: ['OK']
+                });
+              }
+            });
+          }
+        }
+      ]
+    },
+    {
+      label: 'Error Log',
+      submenu: [
+        {
+          label: 'View Error Log',
+          click: () => {
+            if (fs.existsSync(errorLogFilePath)) {
+              require('electron').shell.openPath(errorLogFilePath);
+            } else {
+              dialog.showMessageBox({
+                type: 'info',
+                title: 'No Errors',
+                message: 'No errors have been logged yet.',
+                buttons: ['OK']
+              });
+            }
+          }
+        },
+        {
+          label: 'Export Error Log',
+          click: async () => {
+            if (!fs.existsSync(errorLogFilePath)) {
+              dialog.showMessageBox({
+                type: 'info',
+                title: 'No Error Log',
+                message: 'No error log file exists yet.',
+                buttons: ['OK']
+              });
+              return;
+            }
+            const result = await dialog.showSaveDialog({
+              title: 'Export Error Log',
+              defaultPath: `ThymeSheet-ErrorLog-${new Date().toISOString().split('T')[0]}.txt`,
+              filters: [
+                { name: 'Text Files', extensions: ['txt'] },
+                { name: 'All Files', extensions: ['*'] }
+              ]
+            });
+            if (!result.canceled && result.filePath) {
+              fs.copyFileSync(errorLogFilePath, result.filePath);
+              logInfo('Error Log Export', `Error log exported to: ${result.filePath}`);
+              dialog.showMessageBox({
+                type: 'info',
+                title: 'Export Complete',
+                message: 'Error log exported successfully!',
+                detail: result.filePath,
+                buttons: ['OK']
+              });
+            }
+          }
+        },
+        {
+          label: 'Clear Error Log',
+          click: () => {
+            if (fs.existsSync(errorLogFilePath)) {
+              fs.unlinkSync(errorLogFilePath);
+              logInfo('Error Log', 'Error log cleared by user');
+              dialog.showMessageBox({
+                type: 'info',
+                title: 'Log Cleared',
+                message: 'Error log has been cleared successfully.',
+                buttons: ['OK']
+              });
+            }
+          }
+        }
+      ]
+    },
+    { type: 'separator' },
+    {
       label: 'Quit',
       click: () => {
         app.isQuiting = true;
@@ -1104,11 +2057,14 @@ function createTray() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set App User Model ID for Windows taskbar icon grouping
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.jeremy.thymesheet');
   }
+
+  // Check if this is first run and show backup location selector
+  await checkFirstRun();
 
   createWindow();
   createTray();

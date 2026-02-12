@@ -318,7 +318,9 @@
                     projectCodes: JSON.parse(localStorage.getItem('projectCodes') || '[]'),
                     timeEntries: JSON.parse(localStorage.getItem('timeEntries') || '[]'),
                     recentProjects: JSON.parse(localStorage.getItem('recentProjects') || '[]'),
-                    settings: JSON.parse(localStorage.getItem('settings') || '{}')
+                    settings: JSON.parse(localStorage.getItem('settings') || '{}'),
+                    linkedCSVPath: localStorage.getItem('linkedCSVPath') || null,
+                    lastSyncTime: localStorage.getItem('lastSyncTime') || null
                 };
             }
 
@@ -341,6 +343,8 @@
                 localStorage.setItem('timeEntries', JSON.stringify(data.timeEntries));
                 localStorage.setItem('recentProjects', JSON.stringify(data.recentProjects));
                 localStorage.setItem('settings', JSON.stringify(data.settings));
+                if (data.linkedCSVPath !== undefined) localStorage.setItem('linkedCSVPath', data.linkedCSVPath || '');
+                if (data.lastSyncTime !== undefined) localStorage.setItem('lastSyncTime', data.lastSyncTime || '');
                 return;
             }
 
@@ -369,6 +373,10 @@
             const [newTaskCode, setNewTaskCode] = useState('');
             const [newSubtaskCode, setNewSubtaskCode] = useState('');
             const [linkedCSVPath, setLinkedCSVPath] = useState(null);
+            const [lastSyncTime, setLastSyncTime] = useState(null);
+            const [projectCodesModified, setProjectCodesModified] = useState(false);
+            const [locallyAddedCodes, setLocallyAddedCodes] = useState([]); // Track codes added locally
+            const [hiddenProjectIds, setHiddenProjectIds] = useState([]); // Track locally hidden codes
 
             // New state for comments
             const [currentComment, setCurrentComment] = useState('');
@@ -622,6 +630,19 @@
                             setLinkedCSVPath(data.linkedCSVPath);
                         }
 
+                        // Load last sync time
+                        if (data && data.lastSyncTime) {
+                            setLastSyncTime(data.lastSyncTime);
+                        }
+
+                        // Load locally added codes and hidden IDs
+                        if (data && data.locallyAddedCodes) {
+                            setLocallyAddedCodes(data.locallyAddedCodes);
+                        }
+                        if (data && data.hiddenProjectIds) {
+                            setHiddenProjectIds(data.hiddenProjectIds);
+                        }
+
                         if (data && data.settings) {
                             const settings = data.settings;
                             setTimeRounding(settings.timeRounding || 'none');
@@ -668,6 +689,47 @@
                             setLastActivityTime(Date.now());
                             setSelectedProject(session.projectId);
                         }
+
+                        // Migrate old recent projects IDs to new stable IDs
+                        if (data && data.recentProjects && data.recentProjects.length > 0 && data.projectCodes) {
+                            const migratedRecent = [];
+                            const validProjectIds = new Set(data.projectCodes.map(p => p.id));
+
+                            for (const oldId of data.recentProjects) {
+                                // If ID still exists (already migrated or valid), keep it
+                                if (validProjectIds.has(oldId)) {
+                                    migratedRecent.push(oldId);
+                                } else {
+                                    // Try to find matching project by looking at time entries
+                                    const matchingEntry = data.timeEntries
+                                        ? data.timeEntries.find(e => e.projectId === oldId)
+                                        : null;
+
+                                    if (matchingEntry) {
+                                        // Find the current project with same attributes
+                                        const newProject = data.projectCodes.find(p =>
+                                            p.clientName === matchingEntry.clientName &&
+                                            p.projectName === matchingEntry.projectName &&
+                                            p.taskCode === matchingEntry.taskCode &&
+                                            p.subtaskCode === matchingEntry.subtaskCode
+                                        );
+
+                                        if (newProject && !migratedRecent.includes(newProject.id)) {
+                                            migratedRecent.push(newProject.id);
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Only update if migration changed something
+                            if (migratedRecent.length !== data.recentProjects.length ||
+                                migratedRecent.some((id, i) => id !== data.recentProjects[i])) {
+                                console.log('Migrating recent projects from old IDs to new stable IDs');
+                                console.log('Old:', data.recentProjects);
+                                console.log('New:', migratedRecent);
+                                setRecentProjects(migratedRecent);
+                            }
+                        }
                     } catch (error) {
                         console.error('Error loading data:', error);
                         setStorageError('Failed to load data');
@@ -677,6 +739,9 @@
 
                 loadData();
             }, [licenseState]);
+
+            // Filter out hidden project codes for display
+            const visibleProjectCodes = projectCodes.filter(p => !hiddenProjectIds.includes(p.id));
 
             // Save all data to file whenever anything changes
             useEffect(() => {
@@ -721,6 +786,9 @@
                             recentProjects,
                             expenses,
                             linkedCSVPath,
+                            lastSyncTime,
+                            locallyAddedCodes,
+                            hiddenProjectIds,
                             settings,
                             activeSession,
                             companyProfiles,
@@ -734,7 +802,61 @@
                 // Debounce saves to avoid too many writes
                 const timeoutId = setTimeout(saveData, 500);
                 return () => clearTimeout(timeoutId);
-            }, [projectCodes, timeEntries, recentProjects, expenses, linkedCSVPath, timeRounding, autoPauseEnabled, autoPauseMinutes, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, floatingTimerEnabled, lastFullDayNotification, lastHourlyNotification, dailyProgressEnabled, timeSummaryEnabled, recentProjectsEnabled, timeSummaryExpanded, emailProvider, idleDetectionEnabled, idleTimeoutMinutes, activityReminderEnabled, reminderIntervalMinutes, expenseTrackingEnabled, businessLogo, invoiceHeaderColor, invoiceGrouping, isTracking, currentSession, elapsedTime, currentComment, companyProfiles, clientProfiles]);
+            }, [projectCodes, timeEntries, recentProjects, expenses, linkedCSVPath, lastSyncTime, locallyAddedCodes, hiddenProjectIds, timeRounding, autoPauseEnabled, autoPauseMinutes, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, floatingTimerEnabled, lastFullDayNotification, lastHourlyNotification, dailyProgressEnabled, timeSummaryEnabled, recentProjectsEnabled, timeSummaryExpanded, emailProvider, idleDetectionEnabled, idleTimeoutMinutes, activityReminderEnabled, reminderIntervalMinutes, expenseTrackingEnabled, businessLogo, invoiceHeaderColor, invoiceGrouping, isTracking, currentSession, elapsedTime, currentComment, companyProfiles, clientProfiles]);
+
+            // Auto-sync timer - syncs at 8 AM and 5 PM daily
+            useEffect(() => {
+                if (!linkedCSVPath) {
+                    return;
+                }
+
+                const checkAndSync = async () => {
+                    const now = new Date();
+                    const currentHour = now.getHours();
+                    const currentMinute = now.getMinutes();
+
+                    // Check if it's 8 AM or 5 PM (within first 5 minutes of the hour)
+                    const isSyncTime = (currentHour === 8 || currentHour === 17) && currentMinute < 5;
+
+                    if (isSyncTime && lastSyncTime) {
+                        const lastSync = new Date(lastSyncTime);
+                        const hoursSinceSync = (now - lastSync) / (1000 * 60 * 60);
+
+                        // Only sync if it's been more than 1 hour since last sync
+                        if (hoursSinceSync > 1) {
+                            console.log('Auto-sync: Running scheduled sync from CSV');
+                            await refreshFromCSV(true);
+                        }
+                    }
+                };
+
+                // Check every 5 minutes
+                const checkInterval = setInterval(checkAndSync, 5 * 60 * 1000);
+
+                // Also check on mount
+                checkAndSync();
+
+                return () => clearInterval(checkInterval);
+            }, [linkedCSVPath, lastSyncTime]);
+
+            // Auto-sync changes TO CSV - write back modified project codes every 2 minutes
+            useEffect(() => {
+                if (!linkedCSVPath || !projectCodesModified) {
+                    return;
+                }
+
+                const syncChangesToCSV = async () => {
+                    if (projectCodesModified) {
+                        console.log('Auto-sync: Writing modified project codes to CSV');
+                        await syncProjectCodesToCSV(true);
+                    }
+                };
+
+                // Sync changes every 2 minutes if modified
+                const syncInterval = setInterval(syncChangesToCSV, 2 * 60 * 1000);
+
+                return () => clearInterval(syncInterval);
+            }, [linkedCSVPath, projectCodesModified, projectCodes]);
 
             // Activity tracking for auto-pause
             useEffect(() => {
@@ -1343,7 +1465,7 @@
                 }
 
                 const newProject = {
-                    id: Date.now() + Math.random(),
+                    id: generateProjectId(newClientName.trim(), newProjectName.trim(), newTaskCode.trim(), newSubtaskCode.trim()),
                     clientName: newClientName.trim(),
                     projectName: newProjectName.trim(),
                     taskCode: newTaskCode.trim().toUpperCase(),
@@ -1352,6 +1474,8 @@
                 };
 
                 setProjectCodes(prev => [...prev, newProject]);
+                setLocallyAddedCodes(prev => [...prev, newProject.id]); // Track as locally added
+                setProjectCodesModified(true); // Mark as modified
                 setNewClientName('');
                 setNewProjectName('');
                 setNewTaskCode('');
@@ -1366,7 +1490,7 @@
                 }
 
                 const newProject = {
-                    id: Date.now() + Math.random(),
+                    id: generateProjectId(clientName, projectName, inlineTaskCode.trim(), 'NEW'),
                     clientName: clientName,
                     projectName: projectName,
                     taskCode: inlineTaskCode.trim().toUpperCase(),
@@ -1375,6 +1499,8 @@
                 };
 
                 setProjectCodes(prev => [...prev, newProject]);
+                setLocallyAddedCodes(prev => [...prev, newProject.id]); // Track as locally added
+                setProjectCodesModified(true); // Mark as modified
                 setInlineTaskCode('');
                 setShowAddTaskForm(null);
                 showNotification('Task added successfully! Add subtasks below.', 'success');
@@ -1387,7 +1513,7 @@
                 }
 
                 const newProject = {
-                    id: Date.now() + Math.random(),
+                    id: generateProjectId(clientName, projectName, taskCode, inlineSubtaskCode.trim()),
                     clientName: clientName,
                     projectName: projectName,
                     taskCode: taskCode,
@@ -1396,13 +1522,17 @@
                 };
 
                 setProjectCodes(prev => [...prev, newProject]);
+                setLocallyAddedCodes(prev => [...prev, newProject.id]); // Track as locally added
+                setProjectCodesModified(true); // Mark as modified
                 setInlineSubtaskCode('');
                 setShowAddSubtaskForm(null);
                 showNotification('Subtask added successfully!', 'success');
             };
 
             const deleteProjectCode = (id) => {
-                setProjectCodes(prev => prev.filter(project => project.id !== id));
+                // Instead of deleting, add to hidden list (local-only deletion)
+                setHiddenProjectIds(prev => [...prev, id]);
+                // Note: We don't mark as modified because we're NOT syncing deletions to CSV
             };
 
             // Unified Export function - opens review modal for both export types
@@ -2171,18 +2301,37 @@
             const downloadCSVTemplate = () => {
                 const csvContent = [
                     'Client Name,Project/Admin Name,Task Code,Subtask Code',
-                    'Orbital,O2-X Habitat Offsetting Plan,1. Meetings and Delivery,1.1 Project',
-                    'Orbital,O2-X Habitat Offsetting Plan,1. Meetings and Delivery,1.2 Internal',
-                    'Orbital,O2-X Habitat Offsetting Plan,1. Meetings and Delivery,1.3 Regulatory'
+                    'Orbital,"O2-X Habitat Offsetting Plan","1. Meetings and Delivery",1.1 Project',
+                    'Orbital,"O2-X Habitat Offsetting Plan","1. Meetings and Delivery",1.2 Internal',
+                    'Orbital,"O2-X Habitat Offsetting Plan","1. Meetings and Delivery",1.3 Regulatory',
+                    'PRPA,"Climate Action Plan 2024","2. Field Work",2.1 Site Visit',
+                    'Force,"Emergency Response Training","3. Administration",3.1 Planning',
+                    '',
+                    '# CSV FORMATTING GUIDE',
+                    '# - Use quotes around values that contain commas, periods, or special characters',
+                    '# - Each row must have exactly 4 columns: Client, Project, Task, Subtask',
+                    '# - Save this file to a shared network drive so your team can access it',
+                    '# - In ThymeSheet, click "Browse File" to link to this CSV',
+                    '# - Click "Refresh Projects from File" anytime the CSV is updated'
                 ].join('\n');
 
-                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'timesheet-template.csv';
+                a.download = 'thymesheet-projects-template.csv';
                 a.click();
                 window.URL.revokeObjectURL(url);
+
+                showNotification(
+                    "Template downloaded!\n\n" +
+                    "Next steps:\n" +
+                    "1. Open the CSV file and add your projects\n" +
+                    "2. Save it to a network drive\n" +
+                    "3. Click 'Browse File' to link it\n" +
+                    "4. Share the file location with your team",
+                    'success'
+                );
             };
 
             // Update handler functions
@@ -2219,7 +2368,7 @@
 
                             const [clientName, projectName, taskCode, subtaskCode] = values;
                             return {
-                                id: Date.now() + Math.random() + index,
+                                id: generateProjectId(clientName, projectName, taskCode, subtaskCode),
                                 clientName,
                                 projectName,
                                 taskCode: taskCode.toUpperCase(),
@@ -2241,35 +2390,161 @@
                 reader.readAsText(file);
             };
 
+            // Robust CSV parser that handles quoted fields with commas
+            const parseCSVLine = (line) => {
+                const values = [];
+                let current = '';
+                let inQuotes = false;
+
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    const nextChar = line[i + 1];
+
+                    if (char === '"') {
+                        if (inQuotes && nextChar === '"') {
+                            current += '"';
+                            i++;
+                        } else {
+                            inQuotes = !inQuotes;
+                        }
+                    } else if (char === ',' && !inQuotes) {
+                        values.push(current.trim());
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                values.push(current.trim());
+                return values;
+            };
+
+            // Generate stable ID based on project content
+            const generateProjectId = (clientName, projectName, taskCode, subtaskCode) => {
+                const composite = `${clientName}|${projectName}|${taskCode.toUpperCase()}|${subtaskCode.toUpperCase()}`;
+                // Simple hash function to create numeric ID from string
+                let hash = 0;
+                for (let i = 0; i < composite.length; i++) {
+                    const char = composite.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash = hash & hash; // Convert to 32-bit integer
+                }
+                return Math.abs(hash);
+            };
+
+            const parseCSVContent = (content, sourceDescription) => {
+                // Clean up content - remove BOM and weird characters
+                content = content.replace(/^\uFEFF/, ''); // Remove UTF-8 BOM
+                content = content.replace(/^\ufeff/, ''); // Remove UTF-16 BOM
+                content = content.replace(/\r\n/g, '\n'); // Normalize line endings
+                content = content.replace(/\r/g, '\n'); // Handle old Mac line endings
+
+                const lines = content.split('\n').filter(line => line.trim());
+
+                if (lines.length < 2) {
+                    throw new Error(
+                        "CSV FILE IS EMPTY\n\n" +
+                        "Your CSV file has no data rows.\n\n" +
+                        "ACTION NEEDED:\n" +
+                        "1. Open the CSV file in Excel\n" +
+                        "2. Add your projects (one per row)\n" +
+                        "3. Save the file\n" +
+                        "4. Click Refresh Now"
+                    );
+                }
+
+                const header = parseCSVLine(lines[0]);
+                const dataLines = lines.slice(1);
+
+                const importedProjects = dataLines.map((line, index) => {
+                    const values = parseCSVLine(line);
+
+                    // Debug logging
+                    if (index === 0) {
+                        console.log("First data line:", line);
+                        console.log("Parsed values:", values);
+                        console.log("Values count:", values.length);
+                    }
+
+                    if (values.length < 4) {
+                        // Clean up values for display - remove weird characters
+                        let cleanValues = values.map(v => {
+                            return v.replace(/[^\x20-\x7E]/g, '').trim() || "empty";
+                        });
+
+                        // Show the actual raw line for debugging
+                        let rawLinePreview = line.substring(0, 100);
+                        let hexPreview = '';
+                        for (let i = 0; i < Math.min(20, line.length); i++) {
+                            hexPreview += line.charCodeAt(i).toString(16) + ' ';
+                        }
+
+                        throw new Error(
+                            "CSV FORMAT ERROR - Line " + (index + 2) + "\n\n" +
+                            "PROBLEM: This line only has " + values.length + " columns but needs 4.\n\n" +
+                            "WHAT I FOUND:\n" +
+                            "Column 1: " + cleanValues[0] + "\n" +
+                            "Column 2: " + (cleanValues[1] || "MISSING") + "\n" +
+                            "Column 3: " + (cleanValues[2] || "MISSING") + "\n" +
+                            "Column 4: " + (cleanValues[3] || "MISSING") + "\n\n" +
+                            "RAW LINE (first 100 chars):\n" + rawLinePreview + "\n\n" +
+                            "TECHNICAL INFO:\n" +
+                            "Character codes (first 20): " + hexPreview + "\n\n" +
+                            "WHAT I NEED:\n" +
+                            "Column 1: Client Name - example: Orbital\n" +
+                            "Column 2: Project Name - example: O2-X Habitat Plan\n" +
+                            "Column 3: Task Code - example: 1. Meetings\n" +
+                            "Column 4: Subtask Code - example: 1.1 Project\n\n" +
+                            "ACTION NEEDED:\n" +
+                            "1. Screenshot this error and send to support\n" +
+                            "2. Or try saving your Excel file as CSV UTF-8\n" +
+                            "3. Then click Refresh Now"
+                        );
+                    }
+
+                    const [clientName, projectName, taskCode, subtaskCode] = values;
+
+                    if (!clientName || !projectName || !taskCode || !subtaskCode) {
+                        throw new Error(
+                            "EMPTY FIELD ERROR - Line " + (index + 2) + "\n\n" +
+                            "PROBLEM: One or more required fields are empty.\n\n" +
+                            "WHAT I FOUND:\n" +
+                            "Client Name: " + (clientName || "EMPTY") + "\n" +
+                            "Project Name: " + (projectName || "EMPTY") + "\n" +
+                            "Task Code: " + (taskCode || "EMPTY") + "\n" +
+                            "Subtask Code: " + (subtaskCode || "EMPTY") + "\n\n" +
+                            "ACTION NEEDED:\n" +
+                            "1. Open your CSV file in Excel\n" +
+                            "2. Find line " + (index + 2) + "\n" +
+                            "3. Fill in all empty fields\n" +
+                            "4. Save the file and click Refresh Now"
+                        );
+                    }
+
+                    return {
+                        id: generateProjectId(clientName, projectName, taskCode, subtaskCode),
+                        clientName: clientName,
+                        projectName: projectName,
+                        taskCode: taskCode.toUpperCase(),
+                        subtaskCode: subtaskCode.toUpperCase(),
+                        code: taskCode.toUpperCase() + '-' + subtaskCode.toUpperCase()
+                    };
+                });
+
+                return importedProjects;
+            };
+
             const browseCSVFile = async () => {
                 try {
                     const result = await window.require('electron').ipcRenderer.invoke('browse-csv-file');
                     if (result.success && result.content) {
-                        const text = result.content;
-                        const lines = text.split('\n').filter(line => line.trim());
-                        const dataLines = lines.slice(1);
-
-                        const importedProjects = dataLines.map((line, index) => {
-                            const values = line.split(',').map(v => v.trim());
-                            if (values.length < 4) {
-                                throw new Error("Line " + (index + 2) + ": Expected 4 columns, got " + values.length);
-                            }
-
-                            const [clientName, projectName, taskCode, subtaskCode] = values;
-                            return {
-                                id: Date.now() + Math.random() + index,
-                                clientName,
-                                projectName,
-                                taskCode: taskCode.toUpperCase(),
-                                subtaskCode: subtaskCode.toUpperCase(),
-                                code: taskCode.toUpperCase() + '-' + subtaskCode.toUpperCase()
-                            };
-                        });
-
+                        const importedProjects = parseCSVContent(result.content, "selected file");
                         setProjectCodes(prev => [...prev, ...importedProjects]);
                         setLinkedCSVPath(result.path);
                         console.log("Calling showNotification after browse CSV import");
-                        showNotification("Project code(s) successfully uploaded and linked", 'success');
+                        showNotification(
+                            "Successfully imported " + importedProjects.length + " project code(s) from:\n" + result.path,
+                            'success'
+                        );
                     } else if (result.canceled) {
                         // User canceled, do nothing
                     } else {
@@ -2277,66 +2552,185 @@
                     }
                 } catch (error) {
                     console.log("Browse CSV error:", error);
-                    showNotification("Import failed: " + error.message, 'info');
+                    showNotification("Import failed:\n\n" + error.message, 'info');
                 }
             };
 
-            const refreshFromCSV = async () => {
+            // Write project codes back to CSV file - ONLY additions, NOT deletions
+            const syncProjectCodesToCSV = async (silent = false) => {
                 if (!linkedCSVPath) {
-                    showNotification("No linked CSV file. Please browse and select a CSV file first.", 'info');
-                    return;
+                    console.log("No linked CSV path - skipping sync to CSV");
+                    return { success: false };
                 }
 
                 try {
                     const fs = window.require('fs');
+
+                    // Check if file still exists
+                    if (!fs.existsSync(linkedCSVPath)) {
+                        console.log("CSV file not found - cannot sync:", linkedCSVPath);
+                        return { success: false, error: 'CSV file not found' };
+                    }
+
+                    // Read existing CSV to get all codes
                     const csvContent = fs.readFileSync(linkedCSVPath, 'utf8');
-                    const lines = csvContent.split('\n').filter(line => line.trim());
-                    const dataLines = lines.slice(1);
+                    const existingProjects = parseCSVContent(csvContent, linkedCSVPath);
+                    const existingIds = new Set(existingProjects.map(p => p.id));
 
-                    const importedProjects = dataLines.map((line, index) => {
-                        const values = line.split(',').map(v => v.trim());
-                        if (values.length < 4) {
-                            throw new Error("Line " + (index + 2) + ": Expected 4 columns, got " + values.length);
+                    // Find locally added codes that aren't in CSV yet
+                    const newCodesToAdd = projectCodes.filter(p =>
+                        locallyAddedCodes.includes(p.id) && !existingIds.has(p.id)
+                    );
+
+                    if (newCodesToAdd.length === 0) {
+                        if (!silent) {
+                            console.log("No new codes to sync to CSV");
                         }
+                        setProjectCodesModified(false);
+                        return { success: true, count: 0 };
+                    }
 
-                        const [clientName, projectName, taskCode, subtaskCode] = values;
-                        return {
-                            id: Date.now() + Math.random() + index,
-                            clientName,
-                            projectName,
-                            taskCode: taskCode.toUpperCase(),
-                            subtaskCode: subtaskCode.toUpperCase(),
-                            code: taskCode.toUpperCase() + '-' + subtaskCode.toUpperCase()
-                        };
+                    // Merge: existing codes + new additions (NO deletions)
+                    const mergedCodes = [...existingProjects, ...newCodesToAdd];
+
+                    // Build CSV content
+                    let newCsvContent = 'Client Name,Project/Admin Name,Task Code,Subtask Code\n';
+
+                    mergedCodes.forEach(project => {
+                        const clientName = (project.clientName || '').replace(/"/g, '""');
+                        const projectName = (project.projectName || '').replace(/"/g, '""');
+                        const taskCode = (project.taskCode || '').replace(/"/g, '""');
+                        const subtaskCode = (project.subtaskCode || '').replace(/"/g, '""');
+
+                        newCsvContent += `"${clientName}","${projectName}","${taskCode}","${subtaskCode}"\n`;
                     });
 
-                    setProjectCodes(importedProjects);
-                    showNotification("Refreshed " + importedProjects.length + " project code(s) from CSV", 'success');
+                    // Write to CSV file
+                    fs.writeFileSync(linkedCSVPath, newCsvContent, 'utf8');
+                    setLastSyncTime(new Date().toISOString());
+                    setProjectCodesModified(false); // Clear dirty flag
+
+                    if (!silent) {
+                        console.log(`Synced ${newCodesToAdd.length} new code(s) to CSV (total: ${mergedCodes.length})`);
+                    }
+
+                    return { success: true, count: newCodesToAdd.length };
+                } catch (error) {
+                    console.log("Sync to CSV error:", error);
+
+                    if (!silent) {
+                        showNotification(
+                            "Failed to sync changes to CSV file:\n" + error.message,
+                            'info'
+                        );
+                    }
+
+                    return { success: false, error: error.message };
+                }
+            };
+
+            const refreshFromCSV = async (silent = false) => {
+                if (!linkedCSVPath) {
+                    if (!silent) {
+                        showNotification(
+                            "No linked CSV file found.\n\n" +
+                            "To link a CSV file:\n" +
+                            "1. Click 'Browse File'\n" +
+                            "2. Select your CSV file from the network drive\n" +
+                            "3. Click 'Refresh Projects from File' to reload",
+                            'info'
+                        );
+                    }
+                    return { success: false };
+                }
+
+                try {
+                    const fs = window.require('fs');
+
+                    // Check if file still exists
+                    if (!fs.existsSync(linkedCSVPath)) {
+                        throw new Error(
+                            "CSV file not found:\n" + linkedCSVPath + "\n\n" +
+                            "Possible causes:\n" +
+                            "• Network drive is disconnected\n" +
+                            "• File was moved or deleted\n" +
+                            "• You don't have access permissions\n\n" +
+                            "Fix: Click 'Browse File' to relink the CSV file."
+                        );
+                    }
+
+                    const csvContent = fs.readFileSync(linkedCSVPath, 'utf8');
+                    const importedProjects = parseCSVContent(csvContent, linkedCSVPath);
+
+                    // Get locally added codes that aren't in CSV
+                    const csvIds = new Set(importedProjects.map(p => p.id));
+                    const localAdditions = projectCodes.filter(p =>
+                        locallyAddedCodes.includes(p.id) && !csvIds.has(p.id)
+                    );
+
+                    // Merge CSV codes + local additions, then apply hide filter
+                    const allCodes = [...importedProjects, ...localAdditions];
+
+                    setProjectCodes(allCodes);
+                    setLastSyncTime(new Date().toISOString());
+                    setProjectCodesModified(false); // Clear dirty flag after refresh
+
+                    if (!silent) {
+                        showNotification(
+                            "Successfully refreshed " + importedProjects.length + " project code(s) from:\n" + linkedCSVPath,
+                            'success'
+                        );
+                    }
+
+                    return { success: true, count: importedProjects.length };
                 } catch (error) {
                     console.log("Refresh CSV error:", error);
-                    showNotification("Failed to refresh from CSV: " + error.message, 'info');
-                    // Clear invalid path
-                    setLinkedCSVPath(null);
+
+                    // Better error messages for common issues
+                    let errorMsg = error.message;
+
+                    if (error.code === 'ENOENT') {
+                        errorMsg =
+                            "CSV file not found:\n" + linkedCSVPath + "\n\n" +
+                            "The file may have been moved or the network drive is disconnected.\n\n" +
+                            "Fix: Click 'Browse File' to relink your CSV file.";
+                        setLinkedCSVPath(null);
+                    } else if (error.code === 'EACCES' || error.code === 'EPERM') {
+                        errorMsg =
+                            "Permission denied:\n" + linkedCSVPath + "\n\n" +
+                            "You don't have permission to read this file.\n\n" +
+                            "Fix: Check with your IT admin or use a different file location.";
+                        setLinkedCSVPath(null);
+                    } else if (error.message.includes("Line")) {
+                        // CSV parsing errors already have good messages
+                        errorMsg = "CSV Format Error:\n\n" + error.message;
+                    }
+
+                    if (!silent) {
+                        showNotification(errorMsg, 'info');
+                    }
+
+                    return { success: false, error: errorMsg };
                 }
             };
 
             const deleteAllByClient = (clientName) => {
-                const confirmed = window.confirm("Delete all projects for client \"" + clientName + "\"?\n\nThis cannot be undone.");
+                const confirmed = window.confirm("Hide all projects for client \"" + clientName + "\"?\n\nNote: This hides them locally only. They won't be removed from the shared CSV file.");
                 if (confirmed) {
-                    const remaining = projectCodes.filter(p => p.clientName !== clientName);
-                    const deleted = projectCodes.length - remaining.length;
-                    setProjectCodes(remaining);
-                    setStorageError("Deleted " + deleted + " project(s) for " + clientName);
+                    const toHide = projectCodes.filter(p => p.clientName === clientName);
+                    const idsToHide = toHide.map(p => p.id);
+                    setHiddenProjectIds(prev => [...prev, ...idsToHide]);
+                    setStorageError("Hidden " + idsToHide.length + " project(s) for " + clientName);
                 }
             };
 
             const deleteAllByProject = (clientName, projectName) => {
-                const confirmed = window.confirm("Delete all codes for \"" + projectName + "\" under client \"" + clientName + "\"?\n\nThis cannot be undone.");
+                const confirmed = window.confirm("Hide all codes for \"" + projectName + "\" under client \"" + clientName + "\"?\n\nNote: This hides them locally only. They won't be removed from the shared CSV file.");
                 if (confirmed) {
-                    const remaining = projectCodes.filter(p => !(p.clientName === clientName && p.projectName === projectName));
-                    const deleted = projectCodes.length - remaining.length;
-                    setProjectCodes(remaining);
-                    setStorageError("Deleted " + deleted + " code(s) for " + projectName);
+                    const toHide = projectCodes.filter(p => p.clientName === clientName && p.projectName === projectName);
+                    const idsToHide = toHide.map(p => p.id);
+                    setHiddenProjectIds(prev => [...prev, ...idsToHide]);
+                    setStorageError("Hidden " + idsToHide.length + " code(s) for " + projectName);
                 }
             };
 
@@ -4343,14 +4737,14 @@
 
             // Helper functions for cascading dropdowns
             const getAvailableClients = () => {
-                const clients = new Set(projectCodes.map(p => p.clientName));
+                const clients = new Set(visibleProjectCodes.map(p => p.clientName));
                 return Array.from(clients).sort();
             };
 
             const getAvailableProjectNames = (clientName) => {
                 if (!clientName) return [];
                 const projects = new Set(
-                    projectCodes
+                    visibleProjectCodes
                         .filter(p => p.clientName === clientName)
                         .map(p => p.projectName)
                 );
@@ -4360,7 +4754,7 @@
             const getAvailableTaskCodes = (clientName, projectName) => {
                 if (!clientName || !projectName) return [];
                 const tasks = new Set(
-                    projectCodes
+                    visibleProjectCodes
                         .filter(p => p.clientName === clientName && p.projectName === projectName)
                         .map(p => p.taskCode)
                 );
@@ -4369,7 +4763,7 @@
 
             const getAvailableSubtaskCodes = (clientName, projectName, taskCode) => {
                 if (!clientName || !projectName || !taskCode) return [];
-                const subtasks = projectCodes
+                const subtasks = visibleProjectCodes
                     .filter(p =>
                         p.clientName === clientName &&
                         p.projectName === projectName &&
@@ -5212,16 +5606,28 @@
                             )
                         ),
                         linkedCSVPath && React.createElement('div', { className: "mt-4 p-4 bg-soft-gray rounded-subtle" },
-                            React.createElement('p', { className: "text-sm text-gray-700 mb-2" },
-                                React.createElement('strong', null, "Linked File: "),
-                                linkedCSVPath
+                            React.createElement('div', { className: "mb-3" },
+                                React.createElement('p', { className: "text-sm text-gray-700 mb-1" },
+                                    React.createElement('strong', null, "Linked File: "),
+                                    linkedCSVPath
+                                ),
+                                React.createElement('p', { className: "text-xs text-gray-600 italic" },
+                                    "✓ Auto-syncs from CSV at 8 AM & 5 PM • New codes saved to CSV every 2 minutes"
+                                ),
+                                React.createElement('p', { className: "text-xs text-gray-500 italic mt-1" },
+                                    "Note: Deletions are local-only to protect shared CSV files"
+                                ),
+                                lastSyncTime && React.createElement('p', { className: "text-xs text-gray-600 mt-1" },
+                                    "Last synced: ",
+                                    new Date(lastSyncTime).toLocaleString()
+                                )
                             ),
                             React.createElement('button', {
-                                onClick: refreshFromCSV,
+                                onClick: () => refreshFromCSV(false),
                                 className: 'flex items-center gap-2 px-4 py-2 bg-eggplant text-white rounded-subtle hover:bg-opacity-90 transition-all font-medium text-sm'
                             },
                                 React.createElement(RefreshCw),
-                                "Refresh Projects from File"
+                                "Refresh Now"
                             )
                         )
                     ),
@@ -7053,7 +7459,7 @@
                                         className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green bg-white"
                                     },
                                         React.createElement('option', { value: '' }, "Select client..."),
-                                        [...new Set(projectCodes.map(p => p.clientName))].sort().map(client =>
+                                        [...new Set(visibleProjectCodes.map(p => p.clientName))].sort().map(client =>
                                             React.createElement('option', { key: client, value: client }, client)
                                         )
                                     )
@@ -7413,7 +7819,7 @@
                                 style: { width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }
                             },
                                 React.createElement('option', { value: "" }, "Select a project..."),
-                                projectCodes.map((proj, idx) =>
+                                visibleProjectCodes.map((proj, idx) =>
                                     React.createElement('option', {
                                         key: idx,
                                         value: `${proj.clientName}::${proj.projectName}::${proj.taskCode}::${proj.subtaskCode}`
