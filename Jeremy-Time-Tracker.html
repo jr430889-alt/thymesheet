@@ -194,6 +194,17 @@
             strokeLinejoin: 'round'
         }, React.createElement('rect', { x: '4', y: '2', width: '16', height: '20', rx: '2', ry: '2' }), React.createElement('path', { d: 'M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01' }));
 
+        const Eye = () => React.createElement('svg', {
+            width: '20',
+            height: '20',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: '2',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round'
+        }, React.createElement('path', { d: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z' }), React.createElement('circle', { cx: '12', cy: '12', r: '3' }));
+
         const Folder = () => React.createElement('svg', {
             width: '18',
             height: '18',
@@ -326,9 +337,45 @@
 
             try {
                 const result = await ipcRenderer.invoke('load-data');
+
+                // Check if auto-recovery happened
+                if (result.recovered) {
+                    console.log('AUTO-RECOVERY:', result.recoveryMessage);
+                    // Show recovery notification to user
+                    if (window.showNotification) {
+                        window.showNotification(
+                            '🔄 DATA RECOVERED!\n\n' +
+                            'Your data file was corrupted or empty.\n' +
+                            'We automatically restored it from:\n\n' +
+                            result.recoverySource + '\n\n' +
+                            'All your time entries and projects are safe!',
+                            'success'
+                        );
+                    } else {
+                        alert('✓ AUTO-RECOVERY: ' + result.recoveryMessage);
+                    }
+                }
+
                 if (result.success && result.data) {
                     return result.data;
                 }
+
+                // Check if manual recovery is needed
+                if (result.needsManualRecovery) {
+                    if (window.showNotification) {
+                        window.showNotification(
+                            '⚠️ DATA FILE CORRUPTED\n\n' +
+                            'Your data file is corrupted and automatic recovery failed.\n\n' +
+                            'Please check your backups folder:\n' +
+                            'Documents\\ThymeSheet\\backups\n\n' +
+                            'Or contact support for help.',
+                            'error'
+                        );
+                    } else {
+                        alert('⚠️ DATA CORRUPTED: ' + result.error);
+                    }
+                }
+
                 return null;
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -489,6 +536,7 @@
             const [filterClient, setFilterClient] = useState('');
             const [filterProject, setFilterProject] = useState('');
             const [mergeEntries, setMergeEntries] = useState(true); // Merge entries with same date/task/subtask
+            const [roundHoursExport, setRoundHoursExport] = useState(false); // Round hours to nearest 0.25 for exports
 
             // Release to Project Manager state
             const [showReviewModal, setShowReviewModal] = useState(false);
@@ -509,6 +557,7 @@
             // Invoice review state
             const [showInvoiceReview, setShowInvoiceReview] = useState(false);
             const [showInvoiceDetails, setShowInvoiceDetails] = useState(false);
+            const [roundToQuarter, setRoundToQuarter] = useState(false);
 
             // Invoice details form state
             const [invoiceCompanyName, setInvoiceCompanyName] = useState('');
@@ -1530,9 +1579,17 @@
             };
 
             const deleteProjectCode = (id) => {
-                // Instead of deleting, add to hidden list (local-only deletion)
-                setHiddenProjectIds(prev => [...prev, id]);
-                // Note: We don't mark as modified because we're NOT syncing deletions to CSV
+                const projectCode = projectCodes.find(p => p.id === id);
+                const codeName = projectCode ? `${projectCode.projectName} - ${projectCode.taskCode} - ${projectCode.subtaskCode}` : 'this code';
+
+                const confirmed = window.confirm(`Hide "${codeName}"?\n\nIMPORTANT: This only hides it from YOUR view in the app.\n• The code is NOT deleted from the CSV file\n• Other users can still see it\n• You can unhide it anytime by clicking \"Show Hidden\" button`);
+
+                if (confirmed) {
+                    // Instead of deleting, add to hidden list (local-only deletion)
+                    setHiddenProjectIds(prev => [...prev, id]);
+                    setStorageError(`Hidden "${codeName}". Click 'Show Hidden' to unhide.`);
+                    // Note: We don't mark as modified because we're NOT syncing deletions to CSV
+                }
             };
 
             // Unified Export function - opens review modal for both export types
@@ -1576,7 +1633,7 @@
             const exportToExcelOnly = async () => {
                 try {
                     // Use the shared workbook generation function with reviewEntries
-                    const workbook = await generateExcelWorkbook(reviewEntries);
+                    const workbook = await generateExcelWorkbook(reviewEntries, roundHoursExport);
 
                     const buffer = await workbook.xlsx.writeBuffer();
                     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -1621,7 +1678,7 @@
             const createEmailDraft = async () => {
                 try {
                     // Use the shared workbook generation function with reviewEntries
-                    const workbook = await generateExcelWorkbook(reviewEntries);
+                    const workbook = await generateExcelWorkbook(reviewEntries, roundHoursExport);
 
                     const buffer = await workbook.xlsx.writeBuffer();
                     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -2715,22 +2772,22 @@
             };
 
             const deleteAllByClient = (clientName) => {
-                const confirmed = window.confirm("Hide all projects for client \"" + clientName + "\"?\n\nNote: This hides them locally only. They won't be removed from the shared CSV file.");
+                const confirmed = window.confirm("Hide all projects for client \"" + clientName + "\"?\n\nIMPORTANT: This only hides them from YOUR view in the app.\n• The projects are NOT deleted from the CSV file\n• Other users can still see them\n• You can unhide them anytime by clicking \"Show Hidden\" button");
                 if (confirmed) {
                     const toHide = projectCodes.filter(p => p.clientName === clientName);
                     const idsToHide = toHide.map(p => p.id);
                     setHiddenProjectIds(prev => [...prev, ...idsToHide]);
-                    setStorageError("Hidden " + idsToHide.length + " project(s) for " + clientName);
+                    setStorageError("Hidden " + idsToHide.length + " project(s) for " + clientName + ". Click 'Show Hidden' to unhide.");
                 }
             };
 
             const deleteAllByProject = (clientName, projectName) => {
-                const confirmed = window.confirm("Hide all codes for \"" + projectName + "\" under client \"" + clientName + "\"?\n\nNote: This hides them locally only. They won't be removed from the shared CSV file.");
+                const confirmed = window.confirm("Hide all codes for \"" + projectName + "\" under client \"" + clientName + "\"?\n\nIMPORTANT: This only hides them from YOUR view in the app.\n• The codes are NOT deleted from the CSV file\n• Other users can still see them\n• You can unhide them anytime by clicking \"Show Hidden\" button");
                 if (confirmed) {
                     const toHide = projectCodes.filter(p => p.clientName === clientName && p.projectName === projectName);
                     const idsToHide = toHide.map(p => p.id);
                     setHiddenProjectIds(prev => [...prev, ...idsToHide]);
-                    setStorageError("Hidden " + idsToHide.length + " code(s) for " + projectName);
+                    setStorageError("Hidden " + idsToHide.length + " code(s) for " + projectName + ". Click 'Show Hidden' to unhide.");
                 }
             };
 
@@ -3062,11 +3119,22 @@
                 }
             };
 
-            const generateInvoiceWorkbook = async (clientsToInvoice, hourlyRate, clientRatesMap = {}, invoiceDetails = {}) => {
+            const generateInvoiceWorkbook = async (clientsToInvoice, hourlyRate, clientRatesMap = {}, invoiceDetails = {}, roundToQuarter = false) => {
                 try {
                     const ExcelJS = window.require('exceljs');
                     const workbook = new ExcelJS.Workbook();
                     const defaultRate = parseFloat(hourlyRate) || 0;
+
+                    // Helper function to round hours - always round to 2 decimals, optionally to nearest 0.25
+                    const roundHours = (hours) => {
+                        if (roundToQuarter) {
+                            // Round to nearest 0.25: multiply by 4, round, divide by 4
+                            return parseFloat((Math.round(hours * 4) / 4).toFixed(2));
+                        } else {
+                            // Just round to 2 decimal places
+                            return parseFloat(hours.toFixed(2));
+                        }
+                    };
 
                     // Filter entries
                     const filteredEntries = timeEntries.filter(entry => {
@@ -3094,7 +3162,7 @@
                     });
 
                     // Generate full timesheet format using the same function as Export Timesheet
-                    const fullTimesheetWorkbook = await generateExcelWorkbook(filteredEntries);
+                    const fullTimesheetWorkbook = await generateExcelWorkbook(filteredEntries, roundToQuarter);
 
                     // Copy the comprehensive timesheet sheet to our invoice workbook
                     const sourceTimesheetSheet = fullTimesheetWorkbook.getWorksheet('ThymeSheet (ALL)');
@@ -3156,7 +3224,7 @@
                                 entry.projectName,
                                 entry.taskCode,
                                 entry.subtaskCode,
-                                entry.hours.toFixed(2),
+                                roundHours(entry.hours),
                                 entry.comment || ''
                             ]);
                             row.eachCell((cell) => {
@@ -3164,7 +3232,7 @@
                             });
                         });
 
-                        const totalRow = timesheet.addRow(['', '', '', 'TOTAL HOURS:', clientEntries.reduce((sum, e) => sum + e.hours, 0).toFixed(2), '']);
+                        const totalRow = timesheet.addRow(['', '', '', 'TOTAL HOURS:', roundHours(clientEntries.reduce((sum, e) => sum + roundHours(e.hours), 0)), '']);
                         totalRow.font = { bold: true };
                         totalRow.eachCell((cell) => {
                             cell.border = { top: { style: 'medium' }, left: { style: 'thin' }, bottom: { style: 'medium' }, right: { style: 'thin' } };
@@ -3372,7 +3440,7 @@
                             if (!projectBreakdown[projectKey][taskKey][subtaskKey]) {
                                 projectBreakdown[projectKey][taskKey][subtaskKey] = { hours: 0, entries: [] };
                             }
-                            projectBreakdown[projectKey][taskKey][subtaskKey].hours += entry.hours;
+                            projectBreakdown[projectKey][taskKey][subtaskKey].hours += roundHours(entry.hours);
                             projectBreakdown[projectKey][taskKey][subtaskKey].entries.push(entry);
                         });
 
@@ -3396,9 +3464,9 @@
                                     descCell.alignment = { vertical: 'middle', horizontal: 'left' };
                                     descCell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
 
-                                    // Hours column - use actual calculated hours value
+                                    // Hours column - use rounded hours value
                                     const hoursCell = invoice.getCell(`D${currentRow}`);
-                                    hoursCell.value = data.hours;
+                                    hoursCell.value = roundHours(data.hours);
                                     hoursCell.numFmt = '0.00';
                                     hoursCell.alignment = { vertical: 'middle', horizontal: 'center' };
                                     hoursCell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
@@ -3637,9 +3705,20 @@
             };
 
             // Shared function to generate Excel workbook from time entries
-            const generateExcelWorkbook = async (entriesToUse) => {
+            const generateExcelWorkbook = async (entriesToUse, roundToQuarterHour = false) => {
                 const ExcelJS = window.require('exceljs');
                 const workbook = new ExcelJS.Workbook();
+
+                // Helper function to round hours - always round to 2 decimals, optionally to nearest 0.25
+                const roundHours = (hours) => {
+                    if (roundToQuarterHour) {
+                        // Round to nearest 0.25: multiply by 4, round, divide by 4
+                        return parseFloat((Math.round(hours * 4) / 4).toFixed(2));
+                    } else {
+                        // Just round to 2 decimal places
+                        return parseFloat(hours.toFixed(2));
+                    }
+                };
                 const worksheet = workbook.addWorksheet('ThymeSheet (ALL)');
 
                 const filteredEntries = entriesToUse;
@@ -3970,7 +4049,7 @@
                             entry.projectName,
                             entry.taskCode,
                             entry.subtaskCode,
-                            parseFloat(entry.hours.toFixed(2)),
+                            roundHours(entry.hours),
                             entry.comment || '',
                             '', // Daily Total - will be formula
                             ''  // Weekly Total - will be formula
@@ -3978,18 +4057,23 @@
 
                         const currentRowNum = row.number;
 
+                        // Format Hours column with 2 decimals
+                        row.getCell(7).numFmt = '0.00';
+
                         // Add Excel formula for Daily Total (column I = 9)
                         // Formula: =IF(COUNTIF($B$[firstRow]:B[currentRow], B[currentRow])=1, SUMIFS($G:$G, $B:$B, B[currentRow]), "")
                         const dailyFormulaFirstRow = detailDataStartRow;
                         row.getCell(9).value = {
                             formula: `IF(COUNTIF($B$${dailyFormulaFirstRow}:B${currentRowNum},B${currentRowNum})=1,SUMIFS($G:$G,$B:$B,B${currentRowNum}),"")`
                         };
+                        row.getCell(9).numFmt = '0.00';
 
                         // Add Excel formula for Weekly Total (column J = 10)
                         // Formula: =IF(COUNTIF($A$[firstRow]:A[currentRow], A[currentRow])=1, SUMIFS($G:$G, $A:$A, A[currentRow]), "")
                         row.getCell(10).value = {
                             formula: `IF(COUNTIF($A$${dailyFormulaFirstRow}:A${currentRowNum},A${currentRowNum})=1,SUMIFS($G:$G,$A:$A,A${currentRowNum}),"")`
                         };
+                        row.getCell(10).numFmt = '0.00';
 
                         // Apply borders - bold borders for week-of-month boundaries
                         row.eachCell((cell) => {
@@ -4004,11 +4088,20 @@
 
                     // Add grand total row for detailed timesheet
                     const detailGrandTotalRow = worksheet.addRow([
-                        '', '', '', '', '', '', '', '', 'GRAND TOTAL:', parseFloat(grandTotal.toFixed(2))
+                        '', '', '', '', '', '', '', '', 'GRAND TOTAL:', ''
                     ]);
+
+                    // Use Excel SUM formula to sum the Weekly Total column (column J)
+                    const lastDataRow = detailGrandTotalRow.number - 1;
+                    detailGrandTotalRow.getCell(10).value = {
+                        formula: `SUM(J${detailDataStartRow}:J${lastDataRow})`
+                    };
+
                     detailGrandTotalRow.font = { bold: true };
                     detailGrandTotalRow.getCell(9).font = { bold: true };
                     detailGrandTotalRow.getCell(10).font = { bold: true };
+                    // Format grand total cell with 2 decimals
+                    detailGrandTotalRow.getCell(10).numFmt = '0.00';
                     detailGrandTotalRow.eachCell((cell) => {
                         cell.border = {
                             top: { style: 'thin' },
@@ -4083,18 +4176,23 @@
                                     projectNo: entry.taskCode,
                                     taskCode: entry.subtaskCode,
                                     dateHours: {},
-                                    total: 0
+                                    notes: [] // Store all notes
                                 };
                             }
                             if (!worleyData[key].dateHours[entry.date]) {
                                 worleyData[key].dateHours[entry.date] = 0;
                             }
+                            // Add raw hours first, will round when displaying
                             worleyData[key].dateHours[entry.date] += entry.hours;
-                            worleyData[key].total += entry.hours;
+
+                            // Collect notes (comments) for this entry
+                            if (entry.comment && entry.comment.trim()) {
+                                worleyData[key].notes.push(entry.comment.trim());
+                            }
                         });
 
-                        // Build header row
-                        const worleyHeaders = ['Work Item', 'Project No.', 'Task Code', ...formattedDates, 'Total'];
+                        // Build header row - now includes Notes column
+                        const worleyHeaders = ['Work Item', 'Project No.', 'Task Code', ...formattedDates, 'Total', 'Notes'];
                         const worleyHeaderRow = worleySheet.addRow(worleyHeaders);
 
                         // Style header row (green like ThymeSheet)
@@ -4123,13 +4221,22 @@
                             ];
 
                             // Add hours for each date (including 0 for dates with no hours)
+                            // Calculate total as sum of rounded daily hours
+                            let rowTotal = 0;
                             allDates.forEach(date => {
                                 const hours = item.dateHours[date] || 0;
-                                rowData.push(hours);
+                                const roundedHours = roundHours(hours);
+                                rowData.push(roundedHours);
+                                rowTotal += roundedHours;
                             });
 
-                            // Add total
-                            rowData.push(item.total);
+                            // Add total (sum of rounded daily values, rounded to 2 decimals for display)
+                            rowData.push(parseFloat(rowTotal.toFixed(2)));
+
+                            // Consolidate and add notes - remove duplicates
+                            const uniqueNotes = [...new Set(item.notes)];
+                            const consolidatedNotes = uniqueNotes.join('; ');
+                            rowData.push(consolidatedNotes);
 
                             const row = worleySheet.addRow(rowData);
                             row.eachCell((cell) => {
@@ -4157,10 +4264,13 @@
 
                         let worleyGrandTotal = 0;
                         allDates.forEach(date => {
-                            totalRowData.push(worleyDailyTotals[date]);
-                            worleyGrandTotal += worleyDailyTotals[date];
+                            const roundedDayTotal = roundHours(worleyDailyTotals[date]);
+                            totalRowData.push(roundedDayTotal);
+                            worleyGrandTotal += roundedDayTotal;
                         });
-                        totalRowData.push(worleyGrandTotal);
+                        // Grand total is sum of rounded daily totals, round to 2 decimals for display
+                        totalRowData.push(parseFloat(worleyGrandTotal.toFixed(2)));
+                        totalRowData.push(''); // Empty cell for Notes column in total row
 
                         const totalRow = worleySheet.addRow(totalRowData);
                         totalRow.font = { bold: true };
@@ -4310,7 +4420,7 @@
                                 entry.projectName,
                                 entry.taskCode,
                                 entry.subtaskCode,
-                                parseFloat(entry.hours.toFixed(2)),
+                                roundHours(entry.hours),
                                 entry.comment || '',
                                 '',
                                 ''
@@ -4318,16 +4428,21 @@
 
                             const currentRowNum = row.number;
 
+                            // Format Hours column with 2 decimals
+                            row.getCell(7).numFmt = '0.00';
+
                             // Add Excel formulas using COUNTIF and SUMIFS
                             // Daily Total: =IF(COUNTIF($B$4:B[row], B[row])=1, SUMIFS($G:$G, $B:$B, B[row]), "")
                             row.getCell(9).value = {
                                 formula: `IF(COUNTIF($B$${clientDataStartRow}:B${currentRowNum},B${currentRowNum})=1,SUMIFS($G:$G,$B:$B,B${currentRowNum}),"")`
                             };
+                            row.getCell(9).numFmt = '0.00';
 
                             // Weekly Total: =IF(COUNTIF($A$4:A[row], A[row])=1, SUMIFS($G:$G, $A:$A, A[row]), "")
                             row.getCell(10).value = {
                                 formula: `IF(COUNTIF($A$${clientDataStartRow}:A${currentRowNum},A${currentRowNum})=1,SUMIFS($G:$G,$A:$A,A${currentRowNum}),"")`
                             };
+                            row.getCell(10).numFmt = '0.00';
 
                             // Apply borders
                             row.eachCell((cell) => {
@@ -4344,11 +4459,20 @@
 
                         // Add grand total row
                         const clientGrandTotalRow = clientSheet.addRow([
-                            '', '', '', '', '', '', '', '', 'GRAND TOTAL:', parseFloat(clientGrandTotal.toFixed(2))
+                            '', '', '', '', '', '', '', '', 'GRAND TOTAL:', ''
                         ]);
+
+                        // Use Excel SUM formula to sum the Weekly Total column (column J)
+                        const clientLastDataRow = clientGrandTotalRow.number - 1;
+                        clientGrandTotalRow.getCell(10).value = {
+                            formula: `SUM(J${clientDataStartRow}:J${clientLastDataRow})`
+                        };
+
                         clientGrandTotalRow.font = { bold: true };
                         clientGrandTotalRow.getCell(9).font = { bold: true };
                         clientGrandTotalRow.getCell(10).font = { bold: true };
+                        // Format grand total with 2 decimals
+                        clientGrandTotalRow.getCell(10).numFmt = '0.00';
                         clientGrandTotalRow.eachCell((cell) => {
                             cell.border = {
                                 top: { style: 'thin' },
@@ -4533,7 +4657,7 @@
 
                 try {
                     // Use the shared workbook generation function
-                    const workbook = await generateExcelWorkbook(filteredEntries);
+                    const workbook = await generateExcelWorkbook(filteredEntries, roundHoursExport);
 
                     // Generate file and download
                     const buffer = await workbook.xlsx.writeBuffer();
@@ -4837,8 +4961,13 @@
                                 React.createElement('div', { className: "w-2 h-2 bg-deep-green rounded-full animate-pulse" }),
                                 React.createElement('div', { className: "text-xl font-mono font-semibold text-deep-green tabular-nums" }, formatTime(elapsedTime))
                             ),
-                            React.createElement('div', { className: "flex-1 text-sm text-gray-700 truncate" },
-                                React.createElement('span', { className: "font-semibold text-deep-green" }, currentSession.projectCode)
+                            React.createElement('div', { className: "flex-1 text-gray-700" },
+                                React.createElement('div', { className: "font-semibold text-deep-green text-sm truncate" },
+                                    currentSession.clientName + ' • ' + currentSession.projectName
+                                ),
+                                React.createElement('div', { className: "text-xs text-gray-500 truncate" },
+                                    [currentSession.taskCode, currentSession.subtaskCode].filter(Boolean).join(' • ')
+                                )
                             ),
                             React.createElement('div', { className: "flex items-center gap-2" },
                                 React.createElement('select', {
@@ -5603,6 +5732,18 @@
                             },
                                 React.createElement(Download),
                                 "Download Template"
+                            ),
+                            hiddenProjectIds.length > 0 && React.createElement('button', {
+                                onClick: () => {
+                                    if (window.confirm(`Show all ${hiddenProjectIds.length} hidden project(s)?\n\nThis will make them visible in dropdowns again.`)) {
+                                        setHiddenProjectIds([]);
+                                        setStorageError(`Showing ${hiddenProjectIds.length} previously hidden project(s)`);
+                                    }
+                                },
+                                className: 'flex items-center gap-2 px-6 py-3 border-2 border-eggplant text-eggplant rounded-subtle hover:bg-eggplant hover:text-white transition-all font-medium'
+                            },
+                                React.createElement(Eye),
+                                `Show ${hiddenProjectIds.length} Hidden`
                             )
                         ),
                         linkedCSVPath && React.createElement('div', { className: "mt-4 p-4 bg-soft-gray rounded-subtle" },
@@ -5918,8 +6059,13 @@
                             React.createElement('div', { className: "w-2 h-2 bg-deep-green rounded-full animate-pulse" }),
                             React.createElement('div', { className: "text-xl font-mono font-semibold text-deep-green tabular-nums" }, formatTime(elapsedTime))
                         ),
-                        React.createElement('div', { className: "flex-1 text-sm text-gray-700 truncate" },
-                            React.createElement('span', { className: "font-semibold text-deep-green" }, currentSession.projectCode)
+                        React.createElement('div', { className: "flex-1 text-gray-700" },
+                            React.createElement('div', { className: "font-semibold text-deep-green text-sm truncate" },
+                                currentSession.clientName + ' • ' + currentSession.projectName
+                            ),
+                            React.createElement('div', { className: "text-xs text-gray-500 truncate" },
+                                [currentSession.taskCode, currentSession.subtaskCode].filter(Boolean).join(' • ')
+                            )
                         ),
                         React.createElement('div', { className: "flex items-center gap-2" },
                             React.createElement('select', {
@@ -7134,6 +7280,22 @@
                                 React.createElement('span', { className: "text-sm font-medium text-gray-900" }, "Combine entries for the same task on the same day"),
                                 React.createElement('p', { className: "text-xs text-gray-600 mt-1" },
                                     "When enabled, multiple time entries for the same task and subtask on the same date will be merged into a single row with combined hours. Comments will be joined together."
+                                )
+                            )
+                        )
+                    ),
+                    React.createElement('div', { className: "mb-4 p-4 bg-pearl rounded-subtle border border-soft-gray" },
+                        React.createElement('label', { className: "flex items-start gap-3 cursor-pointer" },
+                            React.createElement('input', {
+                                type: "checkbox",
+                                checked: roundHoursExport,
+                                onChange: (e) => setRoundHoursExport(e.target.checked),
+                                className: "mt-1 w-4 h-4 text-deep-green border-gray-300 rounded focus:ring-deep-green"
+                            }),
+                            React.createElement('div', null,
+                                React.createElement('span', { className: "text-sm font-medium text-gray-900" }, "Round hours to nearest 0.25"),
+                                React.createElement('p', { className: "text-xs text-gray-600 mt-1" },
+                                    "When enabled, all hour values will be rounded to the nearest quarter hour (e.g., 1.37 → 1.50, 2.13 → 2.25). All numbers will always display with 2 decimal places maximum."
                                 )
                             )
                         )
@@ -8556,6 +8718,19 @@
                                                 rows: 4,
                                                 className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-eggplant"
                                             })
+                                        ),
+                                        React.createElement('div', { className: "flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200" },
+                                            React.createElement('input', {
+                                                type: "checkbox",
+                                                id: "roundToQuarter",
+                                                checked: roundToQuarter,
+                                                onChange: (e) => setRoundToQuarter(e.target.checked),
+                                                className: "w-5 h-5 text-deep-green border-gray-300 rounded focus:ring-deep-green cursor-pointer"
+                                            }),
+                                            React.createElement('label', {
+                                                htmlFor: "roundToQuarter",
+                                                className: "text-sm font-medium text-gray-700 cursor-pointer"
+                                            }, "Round hours to nearest 0.25 (e.g., 1.37 → 1.50)")
                                         )
                                     )
                                 )
@@ -8641,7 +8816,7 @@
                                     // Close details modal
                                     setShowInvoiceDetails(false);
                                     // Generate invoice with all details
-                                    generateInvoiceWorkbook(selectedInvoiceClients, 0, ratesMap, details);
+                                    generateInvoiceWorkbook(selectedInvoiceClients, 0, ratesMap, details, roundToQuarter);
                                 },
                                 className: "px-6 py-2 bg-deep-green text-white rounded-subtle hover:bg-opacity-90 transition-colors font-medium"
                             }, "Generate Invoice")

@@ -128,11 +128,12 @@
         }
 
         .project-details {
-            font-size: 11px;
+            font-size: 9px;
             color: #5a5a5a;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            margin-top: 2px;
         }
 
         @keyframes pulse-dot {
@@ -187,12 +188,17 @@
 
             // Always update timer display
             timerElement.textContent = formatTime(data.elapsedTime || 0);
-            projectCodeElement.textContent = data.projectCode || 'No project';
 
+            // Show Client • Project as main text (large and prominent)
             if (data.clientName && data.projectName) {
-                const details = `${data.clientName} • ${data.projectName}`;
-                projectDetailsElement.textContent = details;
+                projectCodeElement.textContent = `${data.clientName} • ${data.projectName}`;
+                // Show task/subtask codes as smaller detail text below
+                const taskInfo = [];
+                if (data.taskCode) taskInfo.push(data.taskCode);
+                if (data.subtaskCode) taskInfo.push(data.subtaskCode);
+                projectDetailsElement.textContent = taskInfo.join(' • ') || '';
             } else {
+                projectCodeElement.textContent = data.projectCode || 'No project';
                 projectDetailsElement.textContent = 'Start tracking to see timer';
             }
 

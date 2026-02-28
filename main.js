@@ -659,15 +659,173 @@ ipcMain.handle('can-access-feature', (_event, featureName) => {
 ipcMain.handle('load-data', () => {
   try {
     if (fs.existsSync(dataFilePath)) {
-      const data = fs.readFileSync(dataFilePath, 'utf8');
-      return { success: true, data: JSON.parse(data) };
+      const rawData = fs.readFileSync(dataFilePath, 'utf8');
+
+      // Check if file is empty or corrupted
+      if (!rawData || rawData.trim().length < 10) {
+        console.error('CRITICAL: Main data file is empty or corrupted!');
+        logError('Data Load', 'EmptyFile', 'Main data file is empty - attempting auto-recovery', '');
+
+        // Attempt auto-recovery
+        const recovered = attemptAutoRecovery();
+        if (recovered) {
+          return {
+            success: true,
+            data: recovered.data,
+            recovered: true,
+            recoverySource: recovered.source,
+            recoveryMessage: `Auto-recovered from ${recovered.source}`
+          };
+        } else {
+          return {
+            success: false,
+            error: 'Data file is empty and no backup found',
+            needsManualRecovery: true
+          };
+        }
+      }
+
+      // Try to parse JSON
+      let parsedData;
+      try {
+        parsedData = JSON.parse(rawData);
+      } catch (parseError) {
+        console.error('CRITICAL: Data file has invalid JSON!');
+        logError('Data Load', 'InvalidJSON', 'Data file corrupted - attempting auto-recovery', parseError.message);
+
+        // Attempt auto-recovery
+        const recovered = attemptAutoRecovery();
+        if (recovered) {
+          return {
+            success: true,
+            data: recovered.data,
+            recovered: true,
+            recoverySource: recovered.source,
+            recoveryMessage: `Auto-recovered from ${recovered.source} (JSON was corrupted)`
+          };
+        } else {
+          return {
+            success: false,
+            error: 'Data file is corrupted and no backup found',
+            needsManualRecovery: true
+          };
+        }
+      }
+
+      // Validate that data has content
+      if (!parsedData.timeEntries && !parsedData.projectCodes) {
+        console.warn('WARNING: Data file loaded but appears to be missing core data structures');
+      }
+
+      return { success: true, data: parsedData };
     }
     return { success: true, data: null };
   } catch (error) {
     console.error('Error loading data:', error);
+    logError('Data Load', 'LoadError', error.message, error.stack);
     return { success: false, error: error.message };
   }
 });
+
+// Auto-recovery function - tries multiple backup sources
+function attemptAutoRecovery() {
+  console.log('🔄 AUTO-RECOVERY: Searching for valid backup...');
+
+  const recoverySources = [];
+
+  // Source 1: Every-save backups (most recent)
+  const everySaveBackupPath = path.join(backupPath, 'every-save-backups');
+  if (fs.existsSync(everySaveBackupPath)) {
+    const everySaveFiles = fs.readdirSync(everySaveBackupPath)
+      .filter(f => f.startsWith('thymesheet-data-') && f.endsWith('.json'))
+      .sort()
+      .reverse();
+
+    for (const file of everySaveFiles) {
+      recoverySources.push({
+        path: path.join(everySaveBackupPath, file),
+        source: `every-save backup (${file})`
+      });
+    }
+  }
+
+  // Source 2: Daily backups in ThymeSheet-Backups
+  const dailyBackupPath = path.join(backupPath, 'ThymeSheet-Backups');
+  if (fs.existsSync(dailyBackupPath)) {
+    const dailyFiles = fs.readdirSync(dailyBackupPath)
+      .filter(f => f.startsWith('thymesheet-data-') && f.endsWith('.json'))
+      .sort()
+      .reverse();
+
+    for (const file of dailyFiles.slice(0, 5)) {
+      recoverySources.push({
+        path: path.join(dailyBackupPath, file),
+        source: `daily backup (${file})`
+      });
+    }
+  }
+
+  // Source 3: Root backup folder
+  if (fs.existsSync(backupPath)) {
+    const rootFiles = fs.readdirSync(backupPath)
+      .filter(f => f.startsWith('thymesheet-data-') && f.endsWith('.json'))
+      .sort()
+      .reverse();
+
+    for (const file of rootFiles.slice(0, 3)) {
+      recoverySources.push({
+        path: path.join(backupPath, file),
+        source: `backup (${file})`
+      });
+    }
+  }
+
+  // Try each recovery source
+  for (const source of recoverySources) {
+    try {
+      console.log(`  Trying: ${source.source}...`);
+      const backupData = fs.readFileSync(source.path, 'utf8');
+
+      if (!backupData || backupData.trim().length < 10) {
+        console.log(`    ✗ Empty or too small`);
+        continue;
+      }
+
+      const parsedData = JSON.parse(backupData);
+
+      // Validate backup has actual data
+      const hasTimeEntries = parsedData.timeEntries && parsedData.timeEntries.length > 0;
+      const hasProjectCodes = parsedData.projectCodes && parsedData.projectCodes.length > 0;
+
+      if (!hasTimeEntries && !hasProjectCodes) {
+        console.log(`    ✗ No time entries or project codes`);
+        continue;
+      }
+
+      // SUCCESS - found valid backup!
+      console.log(`    ✓ VALID BACKUP FOUND!`);
+      console.log(`      Time entries: ${parsedData.timeEntries?.length || 0}`);
+      console.log(`      Project codes: ${parsedData.projectCodes?.length || 0}`);
+
+      // Restore it as main file
+      fs.writeFileSync(dataFilePath, JSON.stringify(parsedData, null, 2), 'utf8');
+      console.log(`✓ AUTO-RECOVERY SUCCESSFUL - Data restored from ${source.source}`);
+      logInfo('Auto-Recovery', `Successfully restored from ${source.source}`);
+
+      return {
+        data: parsedData,
+        source: source.source
+      };
+    } catch (error) {
+      console.log(`    ✗ Error: ${error.message}`);
+      continue;
+    }
+  }
+
+  console.log('✗ AUTO-RECOVERY FAILED - No valid backups found');
+  logError('Auto-Recovery', 'NoBackupFound', 'Could not find any valid backup to restore from', '');
+  return null;
+}
 
 // Real-time CSV backup function - called on EVERY data save
 function updateMasterCSVBackup(data) {
@@ -717,6 +875,55 @@ function updateMasterCSVBackup(data) {
 // REDUNDANT BACKUP TRIGGER #1: On every save
 ipcMain.handle('save-data', (event, data) => {
   try {
+    // Validate data isn't empty before saving
+    if (!data || (data.timeEntries && data.timeEntries.length === 0 && data.projectCodes && data.projectCodes.length === 0)) {
+      console.warn('WARNING: Attempted to save empty/minimal data - skipping to prevent data loss');
+      // Don't save if data looks suspiciously empty (unless it's truly a new install)
+      if (fs.existsSync(dataFilePath)) {
+        const currentSize = fs.statSync(dataFilePath).size;
+        if (currentSize > 1000) {
+          // Current file has data, don't overwrite with empty
+          logError('Data Save', 'EmptyDataPrevented', 'Blocked save of empty data to prevent data loss', '');
+          return { success: false, error: 'Data validation failed - preventing empty save' };
+        }
+      }
+    }
+
+    // Create every-save backup BEFORE writing new data
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const everySaveBackupPath = path.join(backupPath, 'every-save-backups');
+    if (!fs.existsSync(everySaveBackupPath)) {
+      fs.mkdirSync(everySaveBackupPath, { recursive: true });
+    }
+
+    // Keep last 20 every-save backups (rotate old ones)
+    const everySaveBackupFile = path.join(everySaveBackupPath, `thymesheet-data-${timestamp}.json`);
+
+    // If current file exists and has data, back it up before overwriting
+    if (fs.existsSync(dataFilePath)) {
+      const currentData = fs.readFileSync(dataFilePath, 'utf8');
+      if (currentData.length > 100) {
+        fs.writeFileSync(everySaveBackupFile, currentData, 'utf8');
+        console.log(`✓ Every-save backup created: ${path.basename(everySaveBackupFile)}`);
+
+        // Rotate backups - keep only last 20
+        const backupFiles = fs.readdirSync(everySaveBackupPath)
+          .filter(f => f.startsWith('thymesheet-data-') && f.endsWith('.json'))
+          .sort()
+          .reverse();
+
+        if (backupFiles.length > 20) {
+          backupFiles.slice(20).forEach(oldFile => {
+            try {
+              fs.unlinkSync(path.join(everySaveBackupPath, oldFile));
+            } catch (err) {
+              // Ignore deletion errors
+            }
+          });
+        }
+      }
+    }
+
     // Save JSON file
     fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf8');
 
@@ -726,6 +933,7 @@ ipcMain.handle('save-data', (event, data) => {
     return { success: true };
   } catch (error) {
     console.error('Error saving data:', error);
+    logError('Data Save', 'SaveError', error.message, error.stack);
     return { success: false, error: error.message };
   }
 });
