@@ -8,6 +8,20 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
     <script>
+        // Suppress console warnings from Babel and Tailwind
+        const originalConsoleWarn = console.warn;
+        console.warn = function(...args) {
+            const message = args.join(' ');
+            // Filter out known development warnings
+            if (message.includes('cdn.tailwindcss.com') ||
+                message.includes('in-browser Babel transformer') ||
+                message.includes('deoptimised the styling') ||
+                message.includes('max of 500kB')) {
+                return;
+            }
+            originalConsoleWarn.apply(console, args);
+        };
+
         // Override Babel's inline script size limit
         if (window.Babel && window.Babel.transform) {
             const originalTransform = window.Babel.transform;
@@ -1443,11 +1457,10 @@
                     const now = new Date();
                     const startOfWeek = new Date(now);
                     startOfWeek.setDate(now.getDate() - now.getDay());
-                    startOfWeek.setHours(0, 0, 0, 0);
-                    entries = timeEntries.filter(entry => new Date(entry.date) >= startOfWeek);
+                    const startDateStr = getLocalDateString(startOfWeek);
+                    entries = timeEntries.filter(entry => entry.date >= startDateStr);
                     if (isTracking && currentSession) {
-                        const sessionDate = new Date(currentSession.date);
-                        if (sessionDate >= startOfWeek) {
+                        if (currentSession.date >= startDateStr) {
                             entries = [...entries, { ...currentSession, hours: elapsedTime / (1000 * 60 * 60) }];
                         }
                     }
@@ -3753,11 +3766,12 @@
                             hierarchicalSummary[projectName].tasks[taskCode].subtasks[subtaskCode] = 0;
                         }
 
-                        // Add hours at all levels
-                        hierarchicalSummary[projectName].tasks[taskCode].subtasks[subtaskCode] += entry.hours;
-                        hierarchicalSummary[projectName].tasks[taskCode].total += entry.hours;
-                        hierarchicalSummary[projectName].total += entry.hours;
-                        grandTotal += entry.hours;
+                        // Add hours at all levels (with rounding applied)
+                        const roundedHours = roundHours(entry.hours);
+                        hierarchicalSummary[projectName].tasks[taskCode].subtasks[subtaskCode] += roundedHours;
+                        hierarchicalSummary[projectName].tasks[taskCode].total += roundedHours;
+                        hierarchicalSummary[projectName].total += roundedHours;
+                        grandTotal += roundedHours;
                     });
 
                     // HIERARCHICAL PROJECT SUMMARY TABLE
@@ -4969,7 +4983,7 @@
                                     [currentSession.taskCode, currentSession.subtaskCode].filter(Boolean).join(' • ')
                                 )
                             ),
-                            React.createElement('div', { className: "flex items-center gap-2" },
+                            React.createElement('div', { className: "flex items-center gap-2 flex-shrink-0" },
                                 React.createElement('select', {
                                     key: currentSession ? currentSession.projectId : 'no-session',
                                     value: "",
@@ -4984,7 +4998,7 @@
                                             }
                                         }
                                     },
-                                    className: "px-3 py-1.5 text-xs border border-soft-gray rounded-subtle bg-white text-gray-700 hover:border-deep-green focus:outline-none focus:border-deep-green transition-colors cursor-pointer"
+                                    className: "px-3 py-1.5 text-xs border border-soft-gray rounded-subtle bg-white text-gray-700 hover:border-deep-green focus:outline-none focus:border-deep-green transition-colors cursor-pointer max-w-[180px]"
                                 },
                                     React.createElement('option', { value: "" }, "Switch to..."),
                                     (() => {
@@ -6067,7 +6081,7 @@
                                 [currentSession.taskCode, currentSession.subtaskCode].filter(Boolean).join(' • ')
                             )
                         ),
-                        React.createElement('div', { className: "flex items-center gap-2" },
+                        React.createElement('div', { className: "flex items-center gap-2 flex-shrink-0" },
                             React.createElement('select', {
                                 key: currentSession ? currentSession.projectId : 'no-session',
                                 value: "",
@@ -6082,7 +6096,7 @@
                                         }
                                     }
                                 },
-                                className: "px-3 py-1.5 text-xs border border-soft-gray rounded-subtle bg-white text-gray-700 hover:border-deep-green focus:outline-none focus:border-deep-green transition-colors cursor-pointer"
+                                className: "px-3 py-1.5 text-xs border border-soft-gray rounded-subtle bg-white text-gray-700 hover:border-deep-green focus:outline-none focus:border-deep-green transition-colors cursor-pointer max-w-[180px]"
                             },
                                 React.createElement('option', { value: "" }, "Switch to..."),
                                 (() => {
