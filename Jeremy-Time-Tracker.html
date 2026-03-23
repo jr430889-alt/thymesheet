@@ -7748,6 +7748,15 @@
                                     step: "1",
                                     value: editFormData.startTime || '',
                                     onChange: (e) => setEditFormData({ ...editFormData, startTime: e.target.value }),
+                                    onKeyDown: (e) => {
+                                        // Allow only: numbers, colon, backspace, delete, tab, arrow keys
+                                        const allowedKeys = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+                                        const isNumber = e.key >= '0' && e.key <= '9';
+                                        const isColon = e.key === ':';
+                                        if (!isNumber && !isColon && !allowedKeys.includes(e.key)) {
+                                            e.preventDefault();
+                                        }
+                                    },
                                     className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
                                 })
                             )
@@ -7760,6 +7769,15 @@
                                         step: "1",
                                         value: editFormData.endTime || '',
                                         onChange: (e) => setEditFormData({ ...editFormData, endTime: e.target.value }),
+                                        onKeyDown: (e) => {
+                                            // Allow only: numbers, colon, backspace, delete, tab, arrow keys
+                                            const allowedKeys = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+                                            const isNumber = e.key >= '0' && e.key <= '9';
+                                            const isColon = e.key === ':';
+                                            if (!isNumber && !isColon && !allowedKeys.includes(e.key)) {
+                                                e.preventDefault();
+                                            }
+                                        },
                                         className: "w-full px-2 py-1.5 text-sm border border-soft-gray rounded-subtle focus:outline-none focus:border-deep-green"
                                     }),
                                     editFormData.startTime && React.createElement('div', {
