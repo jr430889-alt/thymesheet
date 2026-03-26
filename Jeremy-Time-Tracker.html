@@ -438,6 +438,7 @@
             const [projectCodesModified, setProjectCodesModified] = useState(false);
             const [locallyAddedCodes, setLocallyAddedCodes] = useState([]); // Track codes added locally
             const [hiddenProjectIds, setHiddenProjectIds] = useState([]); // Track locally hidden codes
+            const [permanentlyDeletedIds, setPermanentlyDeletedIds] = useState([]); // Track codes to permanently delete from CSV
 
             // New state for comments
             const [currentComment, setCurrentComment] = useState('');
@@ -705,6 +706,9 @@
                         if (data && data.hiddenProjectIds) {
                             setHiddenProjectIds(data.hiddenProjectIds);
                         }
+                        if (data && data.permanentlyDeletedIds) {
+                            setPermanentlyDeletedIds(data.permanentlyDeletedIds);
+                        }
 
                         if (data && data.settings) {
                             const settings = data.settings;
@@ -852,6 +856,7 @@
                             lastSyncTime,
                             locallyAddedCodes,
                             hiddenProjectIds,
+                            permanentlyDeletedIds,
                             settings,
                             activeSession,
                             companyProfiles,
@@ -865,7 +870,7 @@
                 // Debounce saves to avoid too many writes
                 const timeoutId = setTimeout(saveData, 500);
                 return () => clearTimeout(timeoutId);
-            }, [projectCodes, timeEntries, recentProjects, expenses, linkedCSVPath, lastSyncTime, locallyAddedCodes, hiddenProjectIds, timeRounding, autoPauseEnabled, autoPauseMinutes, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, floatingTimerEnabled, lastFullDayNotification, lastHourlyNotification, dailyProgressEnabled, timeSummaryEnabled, recentProjectsEnabled, timeSummaryExpanded, emailProvider, idleDetectionEnabled, idleTimeoutMinutes, activityReminderEnabled, reminderIntervalMinutes, expenseTrackingEnabled, businessLogo, invoiceHeaderColor, invoiceGrouping, isTracking, currentSession, elapsedTime, currentComment, companyProfiles, clientProfiles]);
+            }, [projectCodes, timeEntries, recentProjects, expenses, linkedCSVPath, lastSyncTime, locallyAddedCodes, hiddenProjectIds, permanentlyDeletedIds, timeRounding, autoPauseEnabled, autoPauseMinutes, dailyGoalEnabled, dailyGoalHours, fullDayNotificationEnabled, hourlyBreakNotificationEnabled, floatingTimerEnabled, lastFullDayNotification, lastHourlyNotification, dailyProgressEnabled, timeSummaryEnabled, recentProjectsEnabled, timeSummaryExpanded, emailProvider, idleDetectionEnabled, idleTimeoutMinutes, activityReminderEnabled, reminderIntervalMinutes, expenseTrackingEnabled, businessLogo, invoiceHeaderColor, invoiceGrouping, isTracking, currentSession, elapsedTime, currentComment, companyProfiles, clientProfiles]);
 
             // Auto-sync timer - syncs at 8 AM and 5 PM daily
             useEffect(() => {
@@ -1595,13 +1600,29 @@
                 const projectCode = projectCodes.find(p => p.id === id);
                 const codeName = projectCode ? `${projectCode.projectName} - ${projectCode.taskCode} - ${projectCode.subtaskCode}` : 'this code';
 
-                const confirmed = window.confirm(`Hide "${codeName}"?\n\nIMPORTANT: This only hides it from YOUR view in the app.\n• The code is NOT deleted from the CSV file\n• Other users can still see it\n• You can unhide it anytime by clicking \"Show Hidden\" button`);
+                const confirmed = window.confirm(
+                    `Permanently remove "${codeName}" from your app?\n\n` +
+                    `This will:\n` +
+                    `• Remove it from YOUR app permanently\n` +
+                    `• Prevent it from reappearing when you refresh from CSV\n` +
+                    `• NOT delete it from the CSV file (other users will still see it)\n\n` +
+                    `This helps clean up old/outdated project codes.`
+                );
 
                 if (confirmed) {
-                    // Instead of deleting, add to hidden list (local-only deletion)
-                    setHiddenProjectIds(prev => [...prev, id]);
-                    setStorageError(`Hidden "${codeName}". Click 'Show Hidden' to unhide.`);
-                    // Note: We don't mark as modified because we're NOT syncing deletions to CSV
+                    // Remove from local project codes
+                    setProjectCodes(prev => prev.filter(p => p.id !== id));
+
+                    // Add to permanently deleted list (local only - won't sync to CSV)
+                    setPermanentlyDeletedIds(prev => [...prev, id]);
+
+                    // Remove from locally added codes if it was there
+                    setLocallyAddedCodes(prev => prev.filter(codeId => codeId !== id));
+
+                    // Remove from hidden list if it was hidden
+                    setHiddenProjectIds(prev => prev.filter(hiddenId => hiddenId !== id));
+
+                    showNotification(`Permanently removed "${codeName}" from your app. It won't reappear when refreshing from CSV.`, 'success');
                 }
             };
 
@@ -2608,11 +2629,19 @@
                     const result = await window.require('electron').ipcRenderer.invoke('browse-csv-file');
                     if (result.success && result.content) {
                         const importedProjects = parseCSVContent(result.content, "selected file");
-                        setProjectCodes(prev => [...prev, ...importedProjects]);
+                        // Filter out permanently deleted codes
+                        const filteredProjects = importedProjects.filter(p => !permanentlyDeletedIds.includes(p.id));
+
+                        // OVERRIDE: Replace all codes with CSV codes (no merging)
+                        setProjectCodes(filteredProjects);
+
+                        // Clear locally added codes since we're loading fresh from CSV
+                        setLocallyAddedCodes([]);
+
                         setLinkedCSVPath(result.path);
                         console.log("Calling showNotification after browse CSV import");
                         showNotification(
-                            "Successfully imported " + importedProjects.length + " project code(s) from:\n" + result.path,
+                            "Successfully loaded " + filteredProjects.length + " project code(s) from:\n" + result.path,
                             'success'
                         );
                     } else if (result.canceled) {
@@ -2660,7 +2689,7 @@
                         return { success: true, count: 0 };
                     }
 
-                    // Merge: existing codes + new additions (NO deletions)
+                    // Merge: existing codes + new additions (NO deletions synced to CSV)
                     const mergedCodes = [...existingProjects, ...newCodesToAdd];
 
                     // Build CSV content
@@ -2732,16 +2761,16 @@
                     const csvContent = fs.readFileSync(linkedCSVPath, 'utf8');
                     const importedProjects = parseCSVContent(csvContent, linkedCSVPath);
 
-                    // Get locally added codes that aren't in CSV
-                    const csvIds = new Set(importedProjects.map(p => p.id));
-                    const localAdditions = projectCodes.filter(p =>
-                        locallyAddedCodes.includes(p.id) && !csvIds.has(p.id)
-                    );
+                    // Filter out permanently deleted codes from imported projects
+                    const filteredImports = importedProjects.filter(p => !permanentlyDeletedIds.includes(p.id));
 
-                    // Merge CSV codes + local additions, then apply hide filter
-                    const allCodes = [...importedProjects, ...localAdditions];
+                    // OVERRIDE: Replace all local codes with CSV codes (no merging)
+                    // This ensures everyone gets the latest codes from the CSV
+                    setProjectCodes(filteredImports);
 
-                    setProjectCodes(allCodes);
+                    // Clear locally added codes since we're syncing fresh from CSV
+                    setLocallyAddedCodes([]);
+
                     setLastSyncTime(new Date().toISOString());
                     setProjectCodesModified(false); // Clear dirty flag after refresh
 
@@ -2785,22 +2814,62 @@
             };
 
             const deleteAllByClient = (clientName) => {
-                const confirmed = window.confirm("Hide all projects for client \"" + clientName + "\"?\n\nIMPORTANT: This only hides them from YOUR view in the app.\n• The projects are NOT deleted from the CSV file\n• Other users can still see them\n• You can unhide them anytime by clicking \"Show Hidden\" button");
+                const toDelete = projectCodes.filter(p => p.clientName === clientName);
+                const count = toDelete.length;
+
+                const confirmed = window.confirm(
+                    `Permanently remove all ${count} project(s) for client "${clientName}" from your app?\n\n` +
+                    `This will:\n` +
+                    `• Remove them from YOUR app permanently\n` +
+                    `• Prevent them from reappearing when you refresh from CSV\n` +
+                    `• NOT delete them from the CSV file (other users will still see them)\n\n` +
+                    `This helps clean up old/outdated project codes.`
+                );
+
                 if (confirmed) {
-                    const toHide = projectCodes.filter(p => p.clientName === clientName);
-                    const idsToHide = toHide.map(p => p.id);
-                    setHiddenProjectIds(prev => [...prev, ...idsToHide]);
-                    setStorageError("Hidden " + idsToHide.length + " project(s) for " + clientName + ". Click 'Show Hidden' to unhide.");
+                    const idsToDelete = toDelete.map(p => p.id);
+
+                    // Remove from local project codes
+                    setProjectCodes(prev => prev.filter(p => p.clientName !== clientName));
+
+                    // Add to permanently deleted list (local only)
+                    setPermanentlyDeletedIds(prev => [...prev, ...idsToDelete]);
+
+                    // Remove from locally added and hidden lists
+                    setLocallyAddedCodes(prev => prev.filter(id => !idsToDelete.includes(id)));
+                    setHiddenProjectIds(prev => prev.filter(id => !idsToDelete.includes(id)));
+
+                    showNotification(`Permanently removed ${count} project code(s) for "${clientName}" from your app.`, 'success');
                 }
             };
 
             const deleteAllByProject = (clientName, projectName) => {
-                const confirmed = window.confirm("Hide all codes for \"" + projectName + "\" under client \"" + clientName + "\"?\n\nIMPORTANT: This only hides them from YOUR view in the app.\n• The codes are NOT deleted from the CSV file\n• Other users can still see them\n• You can unhide them anytime by clicking \"Show Hidden\" button");
+                const toDelete = projectCodes.filter(p => p.clientName === clientName && p.projectName === projectName);
+                const count = toDelete.length;
+
+                const confirmed = window.confirm(
+                    `Permanently remove all ${count} code(s) for project "${projectName}" from your app?\n\n` +
+                    `This will:\n` +
+                    `• Remove them from YOUR app permanently\n` +
+                    `• Prevent them from reappearing when you refresh from CSV\n` +
+                    `• NOT delete them from the CSV file (other users will still see them)\n\n` +
+                    `This helps clean up old/outdated project codes.`
+                );
+
                 if (confirmed) {
-                    const toHide = projectCodes.filter(p => p.clientName === clientName && p.projectName === projectName);
-                    const idsToHide = toHide.map(p => p.id);
-                    setHiddenProjectIds(prev => [...prev, ...idsToHide]);
-                    setStorageError("Hidden " + idsToHide.length + " code(s) for " + projectName + ". Click 'Show Hidden' to unhide.");
+                    const idsToDelete = toDelete.map(p => p.id);
+
+                    // Remove from local project codes
+                    setProjectCodes(prev => prev.filter(p => !(p.clientName === clientName && p.projectName === projectName)));
+
+                    // Add to permanently deleted list (local only)
+                    setPermanentlyDeletedIds(prev => [...prev, ...idsToDelete]);
+
+                    // Remove from locally added and hidden lists
+                    setLocallyAddedCodes(prev => prev.filter(id => !idsToDelete.includes(id)));
+                    setHiddenProjectIds(prev => prev.filter(id => !idsToDelete.includes(id)));
+
+                    showNotification(`Permanently removed ${count} code(s) for "${projectName}" from your app.`, 'success');
                 }
             };
 
@@ -7603,8 +7672,7 @@
 
                 // Edit Entry Modal
                 editingEntry && React.createElement('div', {
-                    className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
-                    onClick: cancelEditEntry
+                    className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
                 },
                     React.createElement('div', {
                         className: "bg-white rounded-subtle shadow-xl p-4 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto",
