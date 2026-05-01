@@ -2422,11 +2422,11 @@ app.whenReady().then(async () => {
     }
   }, 60000); // Check every minute
 
-  // Auto-update disabled on startup to prevent false malware detection
-  // Users can check for updates manually via Help menu
-  // setTimeout(() => {
-  //   autoUpdater.checkForUpdates();
-  // }, 3000);
+  // Auto-update enabled - checks for updates 3 seconds after app starts
+  // Updates download in background and notify user when ready
+  setTimeout(() => {
+    autoUpdater.checkForUpdates();
+  }, 3000);
 
   // Register global hotkeys - 3-state cycling: main → floating → hidden → main
   let isTogglingWindow = false;
