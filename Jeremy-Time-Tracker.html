@@ -1329,7 +1329,9 @@
             const getThisWeeksTotalHours = () => {
                 const now = new Date();
                 const startOfWeek = new Date(now);
-                startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+                // Calculate Sunday as start of week (0=Sunday)
+                const dayOfWeek = now.getDay();
+                startOfWeek.setDate(now.getDate() - dayOfWeek);
                 const startDateStr = getLocalDateString(startOfWeek);
 
                 const weekEntries = timeEntries.filter(entry => {
@@ -1390,7 +1392,9 @@
             const getWeekChartData = () => {
                 const now = new Date();
                 const startOfWeek = new Date(now);
-                startOfWeek.setDate(now.getDate() - now.getDay());
+                // Calculate Sunday as start of week (0=Sunday)
+                const dayOfWeek = now.getDay();
+                startOfWeek.setDate(now.getDate() - dayOfWeek);
                 startOfWeek.setHours(0, 0, 0, 0);
 
                 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1461,7 +1465,9 @@
                 } else if (chartPeriod === 'week') {
                     const now = new Date();
                     const startOfWeek = new Date(now);
-                    startOfWeek.setDate(now.getDate() - now.getDay());
+                    // Calculate Sunday as start of week (0=Sunday)
+                    const dayOfWeek = now.getDay();
+                    startOfWeek.setDate(now.getDate() - dayOfWeek);
                     const startDateStr = getLocalDateString(startOfWeek);
                     entries = timeEntries.filter(entry => entry.date >= startDateStr);
                     if (isTracking && currentSession) {
@@ -1506,7 +1512,9 @@
                 } else if (chartPeriod === 'week') {
                     const now = new Date();
                     const startOfWeek = new Date(now);
-                    startOfWeek.setDate(now.getDate() - now.getDay());
+                    // Calculate Sunday as start of week (0=Sunday)
+                    const dayOfWeek = now.getDay();
+                    startOfWeek.setDate(now.getDate() - dayOfWeek);
                     const endOfWeek = new Date(startOfWeek);
                     endOfWeek.setDate(startOfWeek.getDate() + 6);
                     return startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' - ' + endOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -4053,7 +4061,7 @@
 
                         // Weekly totals (week starting Sunday)
                         const entryDate = new Date(entry.date);
-                        const dayOfWeek = entryDate.getDay();
+                        const dayOfWeek = entryDate.getDay(); // 0=Sunday
                         const weekStart = new Date(entryDate);
                         weekStart.setDate(entryDate.getDate() - dayOfWeek);
                         const weekKey = getLocalDateString(weekStart);
@@ -4068,11 +4076,38 @@
                     const getWeekOfMonth = (dateStr) => {
                         // Parse date string directly to avoid timezone issues
                         const parts = dateStr.split('-');
-                        const dayOfMonth = parseInt(parts[2]);
+                        const year = parseInt(parts[0]);
+                        const month = parseInt(parts[1]) - 1;
+                        const day = parseInt(parts[2]);
 
-                        // Simply calculate week based on day of month
-                        // Week 1: days 1-7, Week 2: days 8-14, Week 3: days 15-21, Week 4: days 22-28, Week 5: days 29+
-                        return Math.ceil(dayOfMonth / 7);
+                        // Get the date and the first day of the month
+                        const date = new Date(year, month, day);
+                        const firstDayOfMonth = new Date(year, month, 1);
+
+                        // Get day of week for the date (0=Sunday, 1=Monday, etc.)
+                        const dayOfWeek = date.getDay();
+
+                        // Get day of week for first day of month
+                        const firstDayOfWeek = firstDayOfMonth.getDay();
+
+                        // Calculate the Sunday of the week containing this date
+                        const sundayOfWeek = new Date(date);
+                        sundayOfWeek.setDate(day - dayOfWeek);
+
+                        // Calculate the first Sunday on or after the 1st of the month
+                        const firstSunday = new Date(firstDayOfMonth);
+                        if (firstDayOfWeek !== 0) {
+                            firstSunday.setDate(1 + (7 - firstDayOfWeek));
+                        }
+
+                        // If the date is before the first Sunday, it's part of week 1
+                        if (sundayOfWeek < firstSunday) {
+                            return 1;
+                        }
+
+                        // Calculate week number based on days since first Sunday
+                        const daysSinceFirstSunday = Math.floor((sundayOfWeek - firstSunday) / (24 * 60 * 60 * 1000));
+                        return Math.floor(daysSinceFirstSunday / 7) + 2;
                     };
 
                     // Function to get week start date (always Sunday)
